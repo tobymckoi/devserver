@@ -53,11 +53,13 @@ fse.ensureFile(CONFIG_FILE, (err) => {
   else {
     // File exists, so load it with a 'require',
     config.cur = require(CONFIG_FILE);
+    configStatusUpdate();
 
     // Watch the config file. When it changes then update 'config'.
     fs.watch(CONFIG_FILE, () => {
       delete require.cache[require.resolve(CONFIG_FILE)];
       config.cur = require(CONFIG_FILE);
+      configStatusUpdate();
     });
 
     pollMonitorProjects();
@@ -66,6 +68,15 @@ fse.ensureFile(CONFIG_FILE, (err) => {
   }
 });
 
+
+// Print out some information about the config we just loaded.
+
+function configStatusUpdate() {
+  console.log("LOADED %s", CONFIG_FILE);
+  if (config.cur.repositories !== undefined) {
+    console.log("  Repositories monitored: %j", config.cur.repositories);
+  }
+}
 
 // Poll the projects we are monitoring,
 
