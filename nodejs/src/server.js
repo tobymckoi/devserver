@@ -43,7 +43,7 @@ const express = require('express');
 
 const CONFIG_FILE = '/var/lib/devserver/config.js';
 
-let config;
+const config = {};
 
 fse.ensureFile(CONFIG_FILE, (err) => {
   if (err) {
@@ -52,28 +52,74 @@ fse.ensureFile(CONFIG_FILE, (err) => {
   }
   else {
     // File exists, so load it with a 'require',
-    config = require(CONFIG_FILE);
+    config.cur = require(CONFIG_FILE);
 
+    // Watch the config file. When it changes then update 'config'.
+    fs.watch(CONFIG_FILE, () => {
+      delete require.cache[require.resolve(CONFIG_FILE)];
+      config.cur = require(CONFIG_FILE);
+    });
+
+    pollMonitorProjects();
     startService();
 
   }
 });
 
 
-// Start the service,
+// Poll the projects we are monitoring,
+
+function pollMonitorProjects() {
+  // Randomize polls so we don't create resonate spikes in traffic,
+  // On average we poll every 5 minutes,
+  const poll_timeout = (30000 + (Math.random() * 60000)) * 5;
+  setTimeout( () => {
+    // Monitor the projects,
+    monitorProjects();
+    // Recurse,
+    pollMonitorProjects();
+  }, poll_timeout );
+}
+
+
+// Start the projects monitoring,
+
+function monitorProjects() {
+  // Scan the list of repositories for the configuration,
+  const repos = config.cur.repositories;
+  if (repos !== undefined) {
+    // The repos are within the /var/lib/devserver/repos/ path.
+    fse.ensureDir('/var/lib/devserver/repos/', (err) => {
+      if (err) {
+        // Ignore this.
+      }
+      repos.forEach( (repo) => {
+        // Form the path,
+        const repo_path = '/var/lib/devserver/repos/' + repo;
+        // Spawn a 'git fetch' command on the repo
+        console.log("Executing git fetch on %s", repo_path);
+      });
+    });
+  }
+}
+
+
+
+// Start the web service,
 
 function startService() {
   const app = express();
 
   // Default to port 2500
   let port = 2500;
-  if (config.port !== void 0) {
-    port = config.port;
+  if (config.cur.port !== void 0) {
+    port = config.cur.port;
   }
 
+  // Define all the HTTP routes,
   app.get('/', (req, res) => {
 
-    const output = util.format("%s says 'Hello!'", config.hostname);
+    const output = util.format("%s says 'Hello!'", config.cur.hostname);
 
     res.end(output);
 
@@ -83,11 +129,12 @@ function startService() {
   //  it's for configuration.
   const options = {
     cert: fs.readFileSync(
-      '/etc/letsencrypt/live/' + config.hostname + '/fullchain.pem'),
+      '/etc/letsencrypt/live/' + config.cur.hostname + '/fullchain.pem'),
     key: fs.readFileSync(
-      '/etc/letsencrypt/live/' + config.hostname + '/privkey.pem')
+      '/etc/letsencrypt/live/' + config.cur.hostname + '/privkey.pem')
   };
 
+  // Create HTTP server and listen on the port,
   https.createServer(options, app).listen(port, () => {
     console.log('Example app listening on port %s!', port);
   });
