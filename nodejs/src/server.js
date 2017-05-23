@@ -96,8 +96,8 @@ function monitorProjects() {
       repos.forEach( (repo) => {
         // Form the path,
         const repo_path = '/var/lib/devserver/repos/' + repo;
-        // Spawn a 'git fetch' command on the repo
-        console.log("Executing git fetch on %s", repo_path);
+        // Spawn a 'git pull' command on the repo
+        console.log("Executing git pull on %s", repo_path);
       });
     });
   }
