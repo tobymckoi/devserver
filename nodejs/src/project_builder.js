@@ -41,6 +41,8 @@ function projectBuilder(config) {
       env: process.env
     };
 
+    let called_cb = false;
+
     const p = spawn(cl_exec, args, options);
     p.stdout.on('data', (data) => {
       pushChunkToBuild(build, chunk('stdout', data));
@@ -49,19 +51,70 @@ function projectBuilder(config) {
       pushChunkToBuild(build, chunk('stderr', data));
     });
     p.on('close', (code) => {
-      callback(undefined, code);
+      if (!called_cb) {
+        called_cb = true;
+        callback(undefined, code);
+      }
     });
     p.on('error', (err) => {
-      callback(err);
+      if (!called_cb) {
+        called_cb = true;
+        callback(err);
+      }
+    });
+
+  }
+
+  // Execute command and capture output of stdout to returned 'result'
+  // string.
+  //   callback => (err, return_code, result)
+
+  function execFunction(pwd, cl_exec, args, callback) {
+
+    const options = {
+      cwd: pwd,
+      env: process.env
+    };
+
+    let called_cb = false;
+
+    let result = '';
+
+    const p = spawn(cl_exec, args, options);
+    p.stdout.on('data', (data) => {
+      result += data.toString();
+    });
+    p.stderr.on('data', (data) => {
+      if (!called_cb) {
+        called_cb = true;
+        callback(data.toString());
+      }
+    });
+    p.on('close', (code) => {
+      if (!called_cb) {
+        called_cb = true;
+        callback(undefined, code, result);
+      }
+    });
+    p.on('error', (err) => {
+      if (!called_cb) {
+        called_cb = true;
+        callback(err);
+      }
     });
 
   }
 
 
+
+
   function fileBuildSuccess(repo_path, build, callback) {
 
     console.log("Build Success: %s", repo_path);
-    console.log(build);
+    const chunks = build.out_chunks;
+    chunks.forEach( (chunk) => {
+      process[chunk.type].write(chunk.data);
+    });
 
     callback();
 
@@ -71,10 +124,28 @@ function projectBuilder(config) {
   function fileBuildFailure(repo_path, build, callback) {
 
     console.log("BUILD FAILED: %s", repo_path);
-    console.log(build);
+    const chunks = build.out_chunks;
+    chunks.forEach( (chunk) => {
+      process[chunk.type].write(chunk.data);
+    });
 
     callback();
 
+  }
+
+
+  function handleBuildFail(build, repo_path, callback) {
+    // File that the build failed,
+    fileBuildFailure(repo_path, build, (err) => {
+      build.in_progress = false;
+      delete current_build_status[repo_path];
+
+      // If the 'fileBuildFailure' function produces an error then
+      // report it to console.error
+      console.error(err);
+
+      callback();
+    });
   }
 
 
@@ -109,21 +180,17 @@ function projectBuilder(config) {
       current_build.in_progress = true;
       current_build.out_chunks = [];
 
-      // Spawn a 'git pull' command on the repo.
+      // Spawn a 'git fetch' command on the repo to download latest
+      // changes.
       // Then, 'git checkout [branch]'
       //
       // Assumes git will work without providing credentials (they've
       // been stored with 'git config credential.helper store')
 
-      execOnLocal(current_build, repo_path, 'git', [ 'pull' ], (err, code) => {
-        console.log("Executed git pull on %s", repo_path);
+      execOnLocal(current_build, repo_path, 'git', [ 'fetch' ], (err, code) => {
+        console.log("%s> git fetch", repo_path);
         if (err) {
-          console.error("Oops, an error happened!");
-          console.error(err);
-          // File that the build failed,
-          fileBuildFailure(repo_path, current_build, () => {
-            current_build.in_process = false;
-            delete current_build_status[repo_path];
+          handleBuildFail(current_build, repo_path, () => {
             callback(err);
           });
         }
@@ -135,7 +202,7 @@ function projectBuilder(config) {
           console.log("Return code: %s", code);
           // File the build success,
           fileBuildSuccess(repo_path, current_build, () => {
-            current_build.in_process = false;
+            current_build.in_progress = false;
             delete current_build_status[repo_path];
             callback(undefined,
                      util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
@@ -164,27 +231,35 @@ function projectBuilder(config) {
 
       const build_result = [];
 
+      // 'fs-extra' bug.
+      let first_call = true;
+
       // The repos are within the /var/lib/devserver/repos/ path.
       fse.ensureDir(repos_path, (err) => {
-        if (err) {
-          // Ignore this.
-        }
-        repos.forEach( (repo) => {
+        if (first_call === true) {
+          first_call = false;
+          if (err) {
+            // Ignore this.
+          }
+          repos.forEach( (repo) => {
 
-          // Form the path,
-          const repo_path = path.join(repos_path, repo);
+            // Form the path,
+            const repo_path = path.join(repos_path, repo);
 
-          // Build it,
-          buildProject(repo_path, (err, status) => {
-            build_result.push({ repo_path, err, status });
-            // All projects built?
-            if (build_result.length === repos.length) {
-              // Callback when complete,
-              callback(undefined, build_result);
-            }
+            // Build it,
+            buildProject(repo_path, (err, status) => {
+              build_result.push({ repo_path, err, status });
+              // All projects built?
+              if (build_result.length === repos.length) {
+                // Callback when complete,
+                if (callback !== undefined) {
+                  callback(undefined, build_result);
+                }
+              }
+            });
+
           });
-
-        });
+        }
       });
     }
   }

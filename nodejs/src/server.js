@@ -149,12 +149,12 @@ function configStatusUpdate() {
 // Full pass poll of the projects we are monitoring,
 
 function pollMonitorProjects() {
+  // Monitor and build the projects,
+  projectBuilder.fullPass();
   // Randomize polls so we don't create resonate spikes in traffic,
   // On average we poll every 5 minutes,
   const poll_timeout = (30000 + (Math.random() * 60000)) * 5;
   setTimeout( () => {
-    // Monitor the projects,
-    projectBuilder.fullPass();
     // Recurse,
     pollMonitorProjects();
   }, poll_timeout );
