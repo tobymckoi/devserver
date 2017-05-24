@@ -224,8 +224,10 @@ function doStartService() {
   // Close current server before restarting a new one,
   if (https_server !== undefined) {
     https_server.once('close', () => {
+      console.log("Server CLOSE event");
       startHttpsService();
     });
+    console.log("Server.close()");
     https_server.close();
   }
   else {
@@ -249,6 +251,7 @@ function startHttpsService() {
       port = config.cur.port;
     }
 
+    console.log("New https_server created");
     https_server = https.createServer(options, app);
     // Create HTTP server and listen on the port,
     https_server.listen(port, () => {
