@@ -138,7 +138,7 @@ function projectBuilder(config) {
             current_build.in_process = false;
             delete current_build_status[repo_path];
             callback(undefined,
-                     util.format("BUILD COMPLETE:%s", new Date().now()));
+                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
           });
         }
       });
