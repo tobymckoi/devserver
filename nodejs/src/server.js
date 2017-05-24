@@ -108,9 +108,8 @@ const CONFIG_FILE = '/var/lib/devserver/config.js';
 const config = {};
 
 fse.ensureFile(CONFIG_FILE, (err) => {
-  console.log(util.format('ensureFile output: %j', err));
-
   if (err) {
+    console.error(util.format('ensureFile output: %j', err));
     console.error(util.format("%s not found.", CONFIG_FILE));
     process.exit(-1);
   }
@@ -125,7 +124,7 @@ fse.ensureFile(CONFIG_FILE, (err) => {
         delete require.cache[require.resolve(CONFIG_FILE)];
         config.cur = require(CONFIG_FILE);
         configStatusUpdate();
-      }, 500);
+      }, 50);
     });
 
     pollMonitorProjects();
@@ -235,24 +234,25 @@ function doStartService() {
 }
 
 function startHttpsService() {
+  // Need timeout here to prevent an fs-extra callback bug.
+  setTimeout( () => {
+    // NOTE: It's ok to have syncronous access to these files because
+    //  it's for configuration.
+    const options = {
+      cert: fs.readFileSync(config.cur.ssl_cert),
+      key: fs.readFileSync(config.cur.ssl_key)
+    };
 
-  // NOTE: It's ok to have syncronous access to these files because
-  //  it's for configuration.
-  const options = {
-    cert: fs.readFileSync(config.cur.ssl_cert),
-    key: fs.readFileSync(config.cur.ssl_key)
-  };
+    // Default to port 2500
+    let port = 2500;
+    if (config.cur.port !== void 0) {
+      port = config.cur.port;
+    }
 
-  // Default to port 2500
-  let port = 2500;
-  if (config.cur.port !== void 0) {
-    port = config.cur.port;
-  }
-
-  https_server = https.createServer(options, app);
-  // Create HTTP server and listen on the port,
-  https_server.listen(port, () => {
-    console.log('Listening on port %s!', port);
-  });
-
+    https_server = https.createServer(options, app);
+    // Create HTTP server and listen on the port,
+    https_server.listen(port, () => {
+      console.log('Listening on port %s!', port);
+    });
+  }, 100);
 }
