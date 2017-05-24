@@ -100,13 +100,16 @@ const fse = require('fs-extra');
 const https = require('https');
 const express = require('express');
 
-
 // Check required files exist,
 
 const CONFIG_FILE = '/var/lib/devserver/config.js';
 
 const config = {};
 
+const projectBuilder = require('./project_builder.js')(config);
+
+
+// Ensure the configuration file exists.
 fse.ensureFile(CONFIG_FILE, (err) => {
   if (err) {
     console.error(util.format('ensureFile output: %j', err));
@@ -143,7 +146,7 @@ function configStatusUpdate() {
   }
 }
 
-// Poll the projects we are monitoring,
+// Full pass poll of the projects we are monitoring,
 
 function pollMonitorProjects() {
   // Randomize polls so we don't create resonate spikes in traffic,
@@ -151,46 +154,11 @@ function pollMonitorProjects() {
   const poll_timeout = (30000 + (Math.random() * 60000)) * 5;
   setTimeout( () => {
     // Monitor the projects,
-    monitorProjects();
+    projectBuilder.fullPass();
     // Recurse,
     pollMonitorProjects();
   }, poll_timeout );
 }
-
-
-// Start the projects monitoring,
-
-function monitorProjects() {
-  // Scan the list of repositories for the configuration,
-  const repos = config.cur.repositories;
-  if (repos !== undefined) {
-    // The repos are within the /var/lib/devserver/repos/ path.
-    fse.ensureDir('/var/lib/devserver/repos/', (err) => {
-      if (err) {
-        // Ignore this.
-      }
-      repos.forEach( (repo) => {
-        // Form the path,
-        const repo_path = '/var/lib/devserver/repos/' + repo;
-
-        // Spawn a 'git pull' command on the repo.
-        // Assumes the branch is checked out to the one we are interested
-        // in (eg. 'git checkout develop').
-        // Assumes git will work without providing credentials (they've
-        // been stored with 'git config credential.helper store')
-
-        console.log("Executing git pull on %s", repo_path);
-
-        // If changes were made then we rebuild the docker image with;
-        //   docker build --tag [docker image tag] .
-        //   docker push [docker image tag]
-
-      });
-    });
-  }
-}
-
-
 
 
 
@@ -211,7 +179,8 @@ function startService() {
 
   });
 
-  // Put server into a restart loop,
+  // Put server into a restart loop, this allows certs to renew while staying
+  // online.
   function timedRestart() {
     doStartService();
     setTimeout( timedRestart, (24 * 60 * 60 * 1000) );
@@ -258,5 +227,5 @@ function startHttpsService() {
     https_server.listen(port, () => {
       console.log('Listening on port %s!', port);
     });
-  }, 100);
+  }, 20);
 }
