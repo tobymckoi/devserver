@@ -214,7 +214,7 @@ function startService() {
   // Put server into a restart loop,
   function timedRestart() {
     doStartService();
-    setTimeout( timedRestart, 5000 );
+    setTimeout( timedRestart, (24 * 60 * 60 * 1000) );
   }
   timedRestart();
 
@@ -226,7 +226,6 @@ function doStartService() {
     https_server.once('close', () => {
       console.log("Server CLOSE event");
     });
-    console.log("Server.close()");
     https_server.close();
     // Start a new service,
     startHttpsService();
