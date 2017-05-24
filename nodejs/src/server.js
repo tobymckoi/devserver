@@ -108,7 +108,7 @@ const CONFIG_FILE = '/var/lib/devserver/config.js';
 const config = {};
 
 fse.ensureFile(CONFIG_FILE, (err) => {
-  console.log('ensureFile output: %j', arguments);
+  console.log(util.format('ensureFile output: %j', arguments));
 
   if (err) {
     console.error(util.format("%s not found.", CONFIG_FILE));
