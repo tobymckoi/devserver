@@ -225,12 +225,14 @@ function doStartService() {
   if (https_server !== undefined) {
     https_server.once('close', () => {
       console.log("Server CLOSE event");
-      startHttpsService();
     });
     console.log("Server.close()");
     https_server.close();
+    // Start a new service,
+    startHttpsService();
   }
   else {
+    // Start a new service,
     startHttpsService();
   }
 }
