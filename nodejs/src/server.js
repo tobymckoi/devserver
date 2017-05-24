@@ -1,16 +1,76 @@
 "use strict";
 
 // The starting point for the server.
+//
 // This loads the configuration file and sets up the system as
-// configured.
-
+// configured. This runs an https server on port 2500 that gives
+// access to build logs and unit testing output. We monitor the git
+// repositories specified in a configuration file. When an update is
+// successfully pulled, the docker image is built and pushed to the
+// docker registry.
+//
 // The configuration file is expected to be found at
 // '/var/lib/devserver/config.js'. If it's not found there then
 // the service terminates.
 //
-// If this is run within a Docker container then the config would
-// typically be mapped there from the file system.
-// '/var/lib/devserver/projects/' is used as the git destination.
+// '/var/lib/devserver/repos/' is used as the git repository
+// destinations.
+//
+// The configuration file at /var/lib/devserver/config.js should
+// look something like this;
+/*
+"use strict";
+
+// Development server configuration
+
+module.exports = {
+
+    // This host name.
+
+    hostname: 'mydev.example.com',
+
+
+    // Full chain and private key for SSL encryption.
+    // (Example uses letsencrypt keys).
+
+    ssl_cert: '/etc/letsencrypt/live/mydev.example.com/fullchain.pem',
+    ssl_key: '/etc/letsencrypt/live/mydev.example.com/privkey.pem',
+
+
+    // The username and password for access to the stats.
+
+    site_user: << Enter User Name >>,
+    site_pass: << Enter Password >>,
+
+
+    // The port to bind the https web service to.
+    // Used for administration.
+
+    port: 2500,
+
+
+    // The repositories. These repositories must be located in the
+    // '/var/lib/devserver/repos/' directory. The projects must
+    // have been already cloned.
+
+    repositories: [
+        {   // Located at /var/lib/devserver/repos/hwserver/
+            gitname: 'hwserver',
+            branch: 'master',
+            dockertag: 'mydev.example.com/toby/hwserver:latest'
+        },
+        {   // Located at /var/lib/devserver/repos/awesome/
+            gitname: 'awesome',
+            branch: 'develop',
+            dockertag: 'mydev.example.com/toby/awesome:latest'
+        }
+    ]
+
+};
+*/
+
+// NOTE: The Docker setup described below probably won't work but
+//   I'm leaving it here for now.
 
 // Docker Setup
 // ------------
@@ -20,7 +80,7 @@
 // for our domain name.
 // Assuming 'devserver/' in the local filesystem contains the data
 // for the app (including the configuration file).
-
+//
 // The docker container might be setup as follows (assuming we
 // have a network 'buildnet' that has a 'registry.local' host
 // within it for managing our registry):
@@ -31,6 +91,8 @@
                -v `pwd`/devserver:/var/lib/devserver \
                toby/devserver:latest
 */
+
+
 
 const util = require('util');
 const fs = require('fs');
@@ -107,8 +169,19 @@ function monitorProjects() {
       repos.forEach( (repo) => {
         // Form the path,
         const repo_path = '/var/lib/devserver/repos/' + repo;
-        // Spawn a 'git pull' command on the repo
+
+        // Spawn a 'git pull' command on the repo.
+        // Assumes the branch is checked out to the one we are interested
+        // in (eg. 'git checkout develop').
+        // Assumes git will work without providing credentials (they've
+        // been stored with 'git config credential.helper store')
+
         console.log("Executing git pull on %s", repo_path);
+
+        // If changes were made then we rebuild the docker image with;
+        //   docker build --tag [docker image tag] .
+        //   docker push [docker image tag]
+
       });
     });
   }
@@ -116,16 +189,15 @@ function monitorProjects() {
 
 
 
+
+
+
 // Start the web service,
 
-function startService() {
-  const app = express();
+let https_server;
+const app = express();
 
-  // Default to port 2500
-  let port = 2500;
-  if (config.cur.port !== void 0) {
-    port = config.cur.port;
-  }
+function startService() {
 
   // Define all the HTTP routes,
   app.get('/', (req, res) => {
@@ -136,17 +208,47 @@ function startService() {
 
   });
 
+  // Put server into a restart loop,
+  function timedRestart() {
+    doStartService();
+    setTimeout( timedRestart, 5000 );
+  }
+  timedRestart();
+
+}
+
+function doStartService() {
+  // Close current server before restarting a new one,
+  if (https_server !== undefined) {
+    https_server.once('close', () => {
+      startHttpsService();
+    });
+    https_server.close();
+  }
+  else {
+    startHttpsService();
+  }
+}
+
+function startHttpsService() {
+
   // NOTE: It's ok to have syncronous access to these files because
   //  it's for configuration.
   const options = {
-    cert: fs.readFileSync(
-      '/etc/letsencrypt/live/' + config.cur.hostname + '/fullchain.pem'),
-    key: fs.readFileSync(
-      '/etc/letsencrypt/live/' + config.cur.hostname + '/privkey.pem')
+    cert: fs.readFileSync(config.cur.ssl_cert),
+    key: fs.readFileSync(config.cur.ssl_key)
   };
 
+  // Default to port 2500
+  let port = 2500;
+  if (config.cur.port !== void 0) {
+    port = config.cur.port;
+  }
+
+  https_server = https.createServer(options, app);
   // Create HTTP server and listen on the port,
-  https.createServer(options, app).listen(port, () => {
-    console.log('Example app listening on port %s!', port);
+  https_server.listen(port, () => {
+    console.log('Listening on port %s!', port);
   });
+
 }
