@@ -159,7 +159,7 @@ function projectBuilder(config) {
   // If the project is currently being built when this is called
   // then callback is only called when the build is complete.
 
-  function buildProject(repo_path, callback) {
+  function buildProject(repo_path, project_branch, callback) {
 
     // Fetch 'current_build'
     let current_build = current_build_status[repo_path];
@@ -180,27 +180,30 @@ function projectBuilder(config) {
       current_build.in_progress = true;
       current_build.out_chunks = [];
 
-      // Spawn a 'git fetch' command on the repo to download latest
-      // changes.
-      // Then, 'git checkout [branch]'
-      //
-      // Assumes git will work without providing credentials (they've
-      // been stored with 'git config credential.helper store')
-
-      execOnLocal(current_build, repo_path, 'git', [ 'fetch' ], (err, code) => {
-        console.log("%s> git fetch", repo_path);
+      // Fetch from remote and determine if current base is different
+      // than the remote.
+      gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
         if (err) {
           handleBuildFail(current_build, repo_path, () => {
             callback(err);
           });
         }
-        else {
-          // If changes were made then we rebuild the docker image with;
-          //   docker build --tag [docker image tag] .
-          //   docker push [docker image tag]
+        else if (different) {
+          // Different, so checkout to new version,
+          pushChunkToBuild(current_build,
+                  chunk('stdout', 'Differences on Git Remote.\n'));
+          fileBuildSuccess(repo_path, current_build, () => {
+            current_build.in_progress = false;
+            delete current_build_status[repo_path];
+            callback(undefined,
+                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+          });
 
-          console.log("Return code: %s", code);
-          // File the build success,
+        }
+        else {
+          // No differences,
+          pushChunkToBuild(current_build,
+                  chunk('stdout', 'No Differences.\n'));
           fileBuildSuccess(repo_path, current_build, () => {
             current_build.in_progress = false;
             delete current_build_status[repo_path];
@@ -210,8 +213,46 @@ function projectBuilder(config) {
         }
       });
 
+
     }
 
+  }
+
+
+
+  // Spawn a 'git fetch' command on the repo to download latest
+  // changes.
+  // Then, 'git checkout [branch]'
+  //
+  // Assumes git will work without providing credentials (they've
+  // been stored with 'git config credential.helper store')
+
+  function gitFetchAndDifCheck(build, repo_path, project_branch, callback) {
+    execOnLocal(build, repo_path, 'git', [ 'fetch' ], (err, code) => {
+      if (err) {
+        callback(err);
+      }
+      else {
+
+        // Determine if our current base is different than target,
+        execFunction(repo_path, 'git', [ 'rev-parse', '--branch', project_branch, 'HEAD' ],
+                        (err, code, result) => {
+          // Three lines; '--branch', '[latest hash]', '[current hash]'
+          const lines = result.split('\n');
+          if (lines.length < 3) {
+            callback('Unexpected git rev-parse output');
+          }
+          else {
+            const latest_hash = lines[1];
+            const current_hash = lines[2];
+            console.log("Current: %s, Latest: %s", current_hash, latest_hash);
+            let different = (latest_hash !== current_hash);
+            callback(undefined, different);
+          }
+        });
+
+      }
+    });
   }
 
 
@@ -241,13 +282,16 @@ function projectBuilder(config) {
           if (err) {
             // Ignore this.
           }
-          repos.forEach( (repo) => {
+          repos.forEach( (repo_ob) => {
+
+            const project_git_name = repo_ob.gitname;
+            const project_branch = repo_ob.branch;
 
             // Form the path,
-            const repo_path = path.join(repos_path, repo);
+            const repo_path = path.join(repos_path, project_git_name);
 
             // Build it,
-            buildProject(repo_path, (err, status) => {
+            buildProject(repo_path, project_branch, (err, status) => {
               build_result.push({ repo_path, err, status });
               // All projects built?
               if (build_result.length === repos.length) {
