@@ -121,9 +121,11 @@ fse.ensureFile(CONFIG_FILE, (err) => {
 
     // Watch the config file. When it changes then update 'config'.
     fs.watch(CONFIG_FILE, () => {
-      delete require.cache[require.resolve(CONFIG_FILE)];
-      config.cur = require(CONFIG_FILE);
-      configStatusUpdate();
+      setTimeout( () => {
+        delete require.cache[require.resolve(CONFIG_FILE)];
+        config.cur = require(CONFIG_FILE);
+        configStatusUpdate();
+      }, 500);
     });
 
     pollMonitorProjects();
