@@ -251,7 +251,7 @@ function projectBuilder(config) {
   // been stored with 'git config credential.helper store')
 
   function gitFetchAndDifCheck(build, repo_path, project_branch, callback) {
-    execOnLocal(build, repo_path, 'git', [ 'fetch' ], (err, code) => {
+    execOnLocal(build, repo_path, 'git', [ 'fetch', '--all' ], (err, code) => {
       if (err) {
         callback(err);
       }
