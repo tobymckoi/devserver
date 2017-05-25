@@ -279,10 +279,13 @@ function projectBuilder(config) {
   }
 
 
-  //
+  // Checkout to the project branch, then merge the current state with the
+  // new one just fetched. This should only be called when
+  // 'gitFetchAndDifCheck' indicates a difference.
 
   function gitCheckoutAndMerge(build, repo_path, project_branch, callback) {
-    execOnLocal(build, repo_path, 'git', [ 'checkout', project_branch ], (err, code) => {
+    execOnLocal(build, repo_path,
+            'git', [ 'checkout', project_branch ], (err, code) => {
       if (err) {
         callback(err);
       }
@@ -290,7 +293,8 @@ function projectBuilder(config) {
         callback('Return code != 0');
       }
       else {
-        execOnLocal(build, repo_path, 'git', [ 'merge' ], (err, code) => {
+        execOnLocal(build, repo_path,
+              'git', [ 'merge' ], (err, code) => {
           if (err) {
             callback(err);
           }
@@ -304,6 +308,8 @@ function projectBuilder(config) {
       }
     });
   }
+
+
 
 
   // Scans all the projects. If a project is not currently being built then
