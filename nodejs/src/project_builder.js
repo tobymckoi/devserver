@@ -248,7 +248,7 @@ function projectBuilder(config) {
       else {
 
         // Determine if our current base is different than target,
-        execFunction(repo_path, 'git', [ 'rev-parse', '--branch', project_branch, 'HEAD' ],
+        execFunction(repo_path, 'git', [ 'rev-parse', '--branch', project_branch, '@{u}' ],
                         (err, code, result) => {
           // Three lines; '--branch', '[latest hash]', '[current hash]'
           const lines = result.split('\n');
