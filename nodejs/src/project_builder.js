@@ -142,7 +142,9 @@ function projectBuilder(config) {
 
       // If the 'fileBuildFailure' function produces an error then
       // report it to console.error
-      console.error(err);
+      if (err) {
+        console.error(err);
+      }
 
       callback();
     });
@@ -192,11 +194,22 @@ function projectBuilder(config) {
           // Different, so checkout to new version,
           pushChunkToBuild(current_build,
                   chunk('stdout', 'Differences on Git Remote.\n'));
-          fileBuildSuccess(repo_path, current_build, () => {
-            current_build.in_progress = false;
-            delete current_build_status[repo_path];
-            callback(undefined,
-                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+
+          // Run 'checkout' then 'merge'
+          gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
+            if (err) {
+              handleBuildFail(current_build, repo_path, () => {
+                callback(err);
+              });
+            }
+            else {
+              fileBuildSuccess(repo_path, current_build, () => {
+                current_build.in_progress = false;
+                delete current_build_status[repo_path];
+                callback(undefined,
+                         util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+              });
+            }
           });
 
         }
@@ -255,6 +268,32 @@ function projectBuilder(config) {
     });
   }
 
+
+  //
+
+  function gitCheckoutAndMerge(build, repo_path, project_branch, callback) {
+    execOnLocal(build, repo_path, 'git', [ 'checkout', project_branch ], (err, code) => {
+      if (err) {
+        callback(err);
+      }
+      else if (code !== 0) {
+        callback('Return code != 0');
+      }
+      else {
+        execOnLocal(build, repo_path, 'git', [ 'merge' ], (err, code) => {
+          if (err) {
+            callback(err);
+          }
+          else if (code !== 0) {
+            callback('Return code != 0');
+          }
+          else {
+            callback();
+          }
+        });
+      }
+    });
+  }
 
 
   // Scans all the projects. If a project is not currently being built then
