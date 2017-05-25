@@ -32,6 +32,15 @@ function projectBuilder(config) {
     }
   }
 
+  function writeToBuildLog(build) {
+    const fargs = [];
+    for (let i = 1; i < arguments.length; ++i) {
+      fargs[i - 1] = arguments[i];
+    }
+    pushChunkToBuild(build,
+            chunk('stdout', util.format.apply(util.format, fargs)));
+  }
+
   // Execute command on the local OS.
 
   function execOnLocal(build, pwd, cl_exec, args, callback) {
@@ -43,6 +52,8 @@ function projectBuilder(config) {
 
     let called_cb = false;
 
+    // Output commands to build log,
+    writeToBuildLog(build, "%s> %s %s\n", pwd, cl_exec, JSON.stringify(args));
     const p = spawn(cl_exec, args, options);
     p.stdout.on('data', (data) => {
       pushChunkToBuild(build, chunk('stdout', data));
@@ -140,7 +151,7 @@ function projectBuilder(config) {
       nargs[i - 1] = arguments[i];
     }
     callbacks.forEach( (callback) => {
-      callback.call(callback, nargs);
+      callback.apply(callback, nargs);
     });
   }
 
@@ -202,8 +213,7 @@ function projectBuilder(config) {
         }
         else if (different) {
           // Different, so checkout to new version,
-          pushChunkToBuild(current_build,
-                  chunk('stdout', 'Differences on Git Remote.\n'));
+          writeToBuildLog(current_build, 'Differences on Git Remote.\n');
 
           // Run 'checkout' then 'merge'
           gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
@@ -225,8 +235,7 @@ function projectBuilder(config) {
         }
         else {
           // No differences,
-          pushChunkToBuild(current_build,
-                  chunk('stdout', 'No Differences.\n'));
+          writeToBuildLog(current_build, 'No Differences.\n');
           fileBuildSuccess(repo_path, current_build, () => {
             current_build.in_progress = false;
             delete current_build_status[repo_path];
