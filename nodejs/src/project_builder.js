@@ -73,7 +73,7 @@ function projectBuilder(config) {
 
     const options = {
       cwd: pwd,
-      env: process.env
+      env: process.env,
     };
 
     let called_cb = false;
@@ -134,6 +134,16 @@ function projectBuilder(config) {
   }
 
 
+  function callCallbackOn(callbacks) {
+    const nargs = [];
+    for (let i = 1; i < arguments.length; ++i) {
+      nargs[i - 1] = arguments[i];
+    }
+    callbacks.forEach( (callback) => {
+      callback.call(callback, nargs);
+    });
+  }
+
   function handleBuildFail(build, repo_path, callback) {
     // File that the build failed,
     fileBuildFailure(repo_path, build, (err) => {
@@ -187,7 +197,7 @@ function projectBuilder(config) {
       gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
         if (err) {
           handleBuildFail(current_build, repo_path, () => {
-            callback(err);
+            callCallbackOn(current_build.callbacks, err);
           });
         }
         else if (different) {
@@ -199,14 +209,14 @@ function projectBuilder(config) {
           gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
             if (err) {
               handleBuildFail(current_build, repo_path, () => {
-                callback(err);
+                callCallbackOn(current_build.callbacks, err);
               });
             }
             else {
               fileBuildSuccess(repo_path, current_build, () => {
                 current_build.in_progress = false;
                 delete current_build_status[repo_path];
-                callback(undefined,
+                callCallbackOn(current_build.callbacks, undefined,
                          util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
               });
             }
@@ -220,7 +230,7 @@ function projectBuilder(config) {
           fileBuildSuccess(repo_path, current_build, () => {
             current_build.in_progress = false;
             delete current_build_status[repo_path];
-            callback(undefined,
+            callCallbackOn(current_build.callbacks, undefined,
                      util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
           });
         }
