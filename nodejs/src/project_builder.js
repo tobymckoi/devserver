@@ -47,18 +47,11 @@ function projectBuilder(config) {
   }
 
   // Execute command on the local OS.
-
-  function execOnLocal(build, pwd, cl_exec, args, callback) {
-
-    const options = {
-      cwd: pwd,
-      env: process.env
-    };
-
+  function execOnLocalOptions(build, cl_exec, args, options, callback) {
     let called_cb = false;
-
     // Output commands to build log,
-    writeToBuildLog(build, "%s> %s %s\n", pwd, cl_exec, JSON.stringify(args));
+    writeToBuildLog(build,
+                "%s> %s %s\n", options.cwd, cl_exec, JSON.stringify(args));
     const p = spawn(cl_exec, args, options);
     p.stdout.on('data', (data) => {
       pushChunkToBuild(build, chunk('stdout', data));
@@ -78,7 +71,14 @@ function projectBuilder(config) {
         callback(err);
       }
     });
+  }
 
+  function execOnLocal(build, pwd, cl_exec, args, callback) {
+    const options = {
+      cwd: pwd,
+      env: process.env
+    };
+    execOnLocalOptions(build, cl_exec, args, options, callback);
   }
 
   // Execute command and capture output of stdout to returned 'result'
@@ -187,7 +187,9 @@ function projectBuilder(config) {
   // If the project is currently being built when this is called
   // then callback is only called when the build is complete.
 
-  function buildProject(repo_path, project_branch, callback) {
+  function buildProject(cur_config, repo_path, repo_ob, callback) {
+
+    const project_branch = repo_ob.branch;
 
     // Fetch 'current_build'
     let current_build = current_build_status[repo_path];
@@ -228,12 +230,10 @@ function projectBuilder(config) {
               });
             }
             else {
-              fileBuildSuccess(repo_path, current_build, () => {
-                current_build.in_progress = false;
-                delete current_build_status[repo_path];
-                callCallbackOn(current_build.callbacks, undefined,
-                         util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-              });
+
+              // Go do the build commands for this project,
+              runBuildScript(cur_config, current_build, repo_path, repo_ob);
+
             }
           });
 
@@ -255,6 +255,81 @@ function projectBuilder(config) {
 
   }
 
+
+  // Perform build commands on the given repository. The build process
+  // varies depending on the project configuration.
+
+  function runBuildScript(cur_config, current_build, repo_path, repo_ob) {
+
+    // What's the build type?
+    const build_type = repo_ob.build;
+    if (build_type !== undefined) {
+
+      // Put the config properties into process environment copy,
+      const new_env = {};
+      for (let key in process.env) {
+        new_env[key] = process.env[key];
+      }
+
+      // Collect the fields necessary to support this build type from
+      // the configuration,
+      const key_type = build_type + '_';
+      for (let key in cur_config) {
+        if (key.startsWith(key_type)) {
+          new_env[key] = cur_config[key];
+        }
+      }
+      for (let key in repo_ob) {
+        if (key.startsWith(key_type)) {
+          new_env[key] = repo_ob[key];
+        }
+      }
+      new_env['repo_path'] = repo_path;
+
+      // The path of the build scripts - './sh/'
+      const build_scripts_path = path.join('.', 'sh');
+
+      // The 'spawn' command options,
+      const options = {
+        cwd: build_scripts_path,
+        env: new_env
+      };
+      // Build shell command - 'docker.sh'
+      const build_shell_script = build_type + ".sh";
+      // Run the build script,
+      execOnLocalOptions(current_build,
+                    build_shell_script, [], options, (err, code) => {
+        // If failed,
+        if (err || code !== 0) {
+          handleBuildFail(current_build, repo_path, () => {
+            callCallbackOn(current_build.callbacks, err);
+          });
+        }
+        // Build success!
+        else {
+          // File success report,
+          fileBuildSuccess(repo_path, current_build, () => {
+            current_build.in_progress = false;
+            delete current_build_status[repo_path];
+            callCallbackOn(current_build.callbacks, undefined,
+                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+          });
+        }
+
+      });
+
+    }
+    else {
+      // File success report,
+      fileBuildSuccess(repo_path, current_build, () => {
+        current_build.in_progress = false;
+        delete current_build_status[repo_path];
+        callCallbackOn(current_build.callbacks, undefined,
+                 util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+      });
+    }
+
+  }
 
 
   // Spawn a 'git fetch' command on the repo to download latest
@@ -324,19 +399,18 @@ function projectBuilder(config) {
   }
 
 
-
-
   // Scans all the projects. If a project is not currently being built then
   // attempts to build the project.
 
   function fullPass(callback) {
+    const cur_config = config.cur;
     // Scan the list of repositories for the configuration,
-    const repos = config.cur.repositories;
+    const repos = cur_config.repositories;
     if (repos !== undefined) {
 
       let repos_path = DEFAULT_REPO_LOCATION;
-      if (config.cur.repos_path !== undefined) {
-        repos_path = config.cur.repos_path;
+      if (cur_config.repos_path !== undefined) {
+        repos_path = cur_config.repos_path;
       }
 
       const build_result = [];
@@ -354,13 +428,12 @@ function projectBuilder(config) {
           repos.forEach( (repo_ob) => {
 
             const project_git_name = repo_ob.gitname;
-            const project_branch = repo_ob.branch;
 
             // Form the path,
             const repo_path = path.join(repos_path, project_git_name);
 
             // Build it,
-            buildProject(repo_path, project_branch, (err, status) => {
+            buildProject(cur_config, repo_path, repo_ob, (err, status) => {
               build_result.push({ repo_path, err, status });
               // All projects built?
               if (build_result.length === repos.length) {

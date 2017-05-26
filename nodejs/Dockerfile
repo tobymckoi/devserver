@@ -9,6 +9,7 @@ COPY package.json /usr/src/app/
 RUN npm install && npm cache clean
 COPY package.json /usr/src/app
 COPY src /usr/src/app/src
+COPY sh /usr/src/app/sh
 
 EXPOSE 2500
 
