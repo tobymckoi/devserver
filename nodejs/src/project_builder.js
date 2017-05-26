@@ -400,6 +400,7 @@ function projectBuilder(config) {
             const extra_env = tobuild_list[i];
             performBuild( extra_env, (err) => {
               if (err) {
+                console.error(err);
                 has_failure = true;
                 last_failure = err;
               }

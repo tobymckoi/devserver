@@ -24,7 +24,7 @@ docker login $docker_registry -u $docker_user -p $docker_pass
 
 if [ $? != 0 ]; then
   echo 'ERROR: Docker Registry Login Failed'
-  exit $?
+  exit 1
 fi
 
 # Build image with Docker
@@ -33,7 +33,7 @@ docker build --tag $docker_tag $docker_path
 
 if [ $? != 0 ]; then
   echo 'ERROR: Docker Build Failed'
-  exit $?
+  exit 1
 fi
 
 # And push it,
@@ -42,5 +42,5 @@ docker push $docker_tag
 
 if [ $? != 0 ]; then
   echo 'ERROR: Docker Registry Push Failed'
-  exit $?
+  exit 1
 fi
