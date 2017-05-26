@@ -53,6 +53,10 @@ module.exports = {
     // '/var/lib/devserver/repos/' directory. The projects must
     // have been already cloned.
 
+    docker_registry: << Docker registry >>,
+    docker_user: << Docker repository username >>,
+    docker_pass: << Docker repository password >>
+
     repositories: [
         {   // Located at /var/lib/devserver/repos/hwserver/
             gitname: 'hwserver',
