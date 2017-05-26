@@ -349,17 +349,25 @@ function projectBuilder(config) {
         // Determine if our current base is different than upstream,
         execFunction(repo_path, 'git', [ 'rev-parse', '--branch', project_branch, '@{u}' ],
                         (err, code, result) => {
-          // Three lines; '--branch', '[latest hash]', '[current hash]'
-          const lines = result.split('\n');
-          if (lines.length < 3) {
-            callback('Unexpected git rev-parse output');
+          if (err) {
+            callback(err);
+          }
+          if (code !== 0) {
+            callback('Expected git rev-parse to return exit 0');
           }
           else {
-            const latest_hash = lines[1];
-            const current_hash = lines[2];
-            console.log("Current: %s, Latest: %s", current_hash, latest_hash);
-            let different = (latest_hash !== current_hash);
-            callback(undefined, different);
+            // Three lines; '--branch', '[latest hash]', '[current hash]'
+            const lines = result.split('\n');
+            if (lines.length < 3) {
+              callback('Unexpected git rev-parse output');
+            }
+            else {
+              const latest_hash = lines[1];
+              const current_hash = lines[2];
+              console.log("Current: %s, Latest: %s", current_hash, latest_hash);
+              let different = (latest_hash !== current_hash);
+              callback(undefined, different);
+            }
           }
         });
 
