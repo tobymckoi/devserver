@@ -10,6 +10,11 @@ const spawn = require('child_process').spawn;
 const DEFAULT_REPO_LOCATION = '/var/lib/devserver/repos/';
 
 
+// Monitors projects in the git repository directory and when the
+// remote is updated, builds the Docker image and pushes it to
+// the registry.
+
+
 function projectBuilder(config) {
 
   // Keeps track of all projects currently build built.
