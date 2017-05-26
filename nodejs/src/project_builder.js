@@ -2,6 +2,7 @@
 
 const path = require('path');
 const util = require('util');
+const fs = require('fs');
 const fse = require('fs-extra');
 
 const spawn = require('child_process').spawn;
@@ -20,6 +21,35 @@ function projectBuilder(config) {
   // Keeps track of all projects currently build built.
   const current_build_status = {};
 
+
+  // Ensure the given file name is executable,
+  function ensureExec(filename, callback) {
+    fs.access(filename, fs.R_OK | fs.X_OK, (err) => {
+      if (err) {
+        // Check the file exists and can be written to,
+        fs.access(filename, fs.F_OK | fs.W_OK, (err) => {
+          if (err) {
+            callback('Unable to make shell file executable');
+          }
+          else {
+            // Make executable,
+            fs.chmod(filename, '755', (err) => {
+              if (err) {
+                callback('Unable to make shell file executable');
+              }
+              else {
+                callback();
+              }
+            });
+          }
+        });
+      }
+      else {
+        // All good!
+        callback();
+      }
+    })
+  }
 
 
   function chunk(type, data) {
@@ -50,27 +80,36 @@ function projectBuilder(config) {
   function execOnLocalOptions(build, cl_exec, args, options, callback) {
     let called_cb = false;
     // Output commands to build log,
+    const resolved_path = path.resolve(options.cwd);
     writeToBuildLog(build,
-                "%s> %s %s\n", path.resolve(options.cwd), cl_exec, JSON.stringify(args));
-    const p = spawn(cl_exec, args, options);
-    p.stdout.on('data', (data) => {
-      pushChunkToBuild(build, chunk('stdout', data));
-    });
-    p.stderr.on('data', (data) => {
-      pushChunkToBuild(build, chunk('stderr', data));
-    });
-    p.on('close', (code) => {
-      if (!called_cb) {
-        called_cb = true;
-        callback(undefined, code);
-      }
-    });
-    p.on('error', (err) => {
-      if (!called_cb) {
-        called_cb = true;
-        callback(err);
-      }
-    });
+        "%s> %s %s\n", resolved_path, cl_exec, JSON.stringify(args));
+    try {
+      const p = spawn(cl_exec, args, options);
+      p.stdout.on('data', (data) => {
+        pushChunkToBuild(build, chunk('stdout', data));
+      });
+      p.stderr.on('data', (data) => {
+        pushChunkToBuild(build, chunk('stderr', data));
+      });
+      p.on('close', (code) => {
+        if (!called_cb) {
+          called_cb = true;
+          callback(undefined, code);
+        }
+      });
+      p.on('error', (err) => {
+        if (!called_cb) {
+          called_cb = true;
+          callback(err);
+        }
+      });
+    }
+    catch (e) {
+      writeToBuildLog(build, "   javascript exception.\n");
+      writeToBuildLog(build, "   %j\n", e);
+      console.error(e);
+      callback(e);
+    }
   }
 
   function execOnLocal(build, pwd, cl_exec, args, callback) {
@@ -126,11 +165,12 @@ function projectBuilder(config) {
 
   function fileBuildSuccess(repo_path, build, callback) {
 
-    console.log("Build Success: %s", repo_path);
+    console.log("$$$ Build Success START: %s", repo_path);
     const chunks = build.out_chunks;
     chunks.forEach( (chunk) => {
       process[chunk.type].write(chunk.data);
     });
+    console.log("$$$ Build Success END: %s", repo_path);
 
     callback();
 
@@ -139,11 +179,12 @@ function projectBuilder(config) {
 
   function fileBuildFailure(repo_path, build, callback) {
 
-    console.log("BUILD FAILED: %s", repo_path);
+    console.log("BUILD FAILED START: %s", repo_path);
     const chunks = build.out_chunks;
     chunks.forEach( (chunk) => {
       process[chunk.type].write(chunk.data);
     });
+    console.log("BUILD FAILED END: %s", repo_path);
 
     callback();
 
@@ -295,29 +336,99 @@ function projectBuilder(config) {
         env: new_env
       };
       // Build shell command - 'docker.sh'
-      const build_shell_script = build_type + ".sh";
-      // Run the build script,
-      execOnLocalOptions(current_build,
-                    build_shell_script, [], options, (err, code) => {
+      const build_shell_script = path.join(
+                  path.resolve(build_scripts_path), build_type + ".sh");
 
-        // If failed,
-        if (err || code !== 0) {
-          handleBuildFail(current_build, repo_path, () => {
-            callCallbackOn(current_build.callbacks, err);
-          });
-        }
-        // Build success!
-        else {
-          // File success report,
-          fileBuildSuccess(repo_path, current_build, () => {
-            current_build.in_progress = false;
-            delete current_build_status[repo_path];
-            callCallbackOn(current_build.callbacks, undefined,
-                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-          });
-        }
+      // Perform the build operation
+      function performBuild(extra_envs, callback) {
+        // Ensure the shell script is executable,
+        ensureExec(build_shell_script, (err) => {
+          if (err) {
+            callback(err);
+          }
+          else {
+            const copts = JSON.parse(JSON.stringify(options));
+            for (let key in extra_envs) {
+              copts.env[key] = extra_envs[key];
+            }
 
-      });
+            // Run the build script,
+            execOnLocalOptions(current_build,
+                        build_shell_script, [], copts, (err, code) => {
+
+              // If failed,
+              if (err) {
+                callback(err);
+              }
+              else if (code !== 0) {
+                callback('Excepted return code of 0');
+              }
+              // Build success!
+              else {
+                callback();
+              }
+            });
+          }
+        });
+      }
+
+
+
+      const tobuild_list = new_env.docker_tobuild;
+      if (tobuild_list !== undefined) {
+        let last_failure;
+        let has_failure = false;
+        let i = 0;
+        function dof() {
+          if (i >= tobuild_list.length) {
+            if (has_failure) {
+              handleBuildFail(current_build, repo_path, () => {
+                callCallbackOn(current_build.callbacks, last_failure);
+              });
+            }
+            else {
+              // File success report,
+              fileBuildSuccess(repo_path, current_build, () => {
+                current_build.in_progress = false;
+                delete current_build_status[repo_path];
+                callCallbackOn(current_build.callbacks, undefined,
+                         util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+              });
+            }
+          }
+          else {
+            const extra_env = tobuild_list[i];
+            performBuild( extra_env, (err) => {
+              if (err) {
+                has_failure = true;
+                last_failure = err;
+              }
+              ++i;
+              dof();
+            });
+          }
+        }
+        dof();
+      }
+      else {
+        performBuild( {}, (err) => {
+          if (err) {
+            handleBuildFail(current_build, repo_path, () => {
+              callCallbackOn(current_build.callbacks, err);
+            });
+          }
+          else {
+            // File success report,
+            fileBuildSuccess(repo_path, current_build, () => {
+              current_build.in_progress = false;
+              delete current_build_status[repo_path];
+              callCallbackOn(current_build.callbacks, undefined,
+                       util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+            });
+          }
+        });
+      }
+
 
     }
     else {
