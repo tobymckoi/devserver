@@ -502,18 +502,18 @@ function projectBuilder(config) {
         callback('Return code != 0');
       }
       else {
-        execOnLocal(build, repo_path,
-              'git', [ 'merge' ], (err, code) => {
-          if (err) {
-            callback(err);
-          }
-          else if (code !== 0) {
-            callback('Return code != 0');
-          }
-          else {
+        // execOnLocal(build, repo_path,
+        //       'git', [ 'merge' ], (err, code) => {
+        //   if (err) {
+        //     callback(err);
+        //   }
+        //   else if (code !== 0) {
+        //     callback('Return code != 0');
+        //   }
+        //   else {
             callback();
-          }
-        });
+        //   }
+        // });
       }
     });
   }
