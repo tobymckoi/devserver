@@ -51,7 +51,7 @@ function projectBuilder(config) {
     let called_cb = false;
     // Output commands to build log,
     writeToBuildLog(build,
-                "%s> %s %s\n", options.cwd, cl_exec, JSON.stringify(args));
+                "%s> %s %s\n", path.resolve(options.cwd), cl_exec, JSON.stringify(args));
     const p = spawn(cl_exec, args, options);
     p.stdout.on('data', (data) => {
       pushChunkToBuild(build, chunk('stdout', data));
@@ -299,6 +299,7 @@ function projectBuilder(config) {
       // Run the build script,
       execOnLocalOptions(current_build,
                     build_shell_script, [], options, (err, code) => {
+
         // If failed,
         if (err || code !== 0) {
           handleBuildFail(current_build, repo_path, () => {
