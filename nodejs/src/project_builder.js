@@ -224,6 +224,7 @@ function projectBuilder(config) {
   function substituteInline(value, substitutes) {
     for (let key in substitutes) {
       const subst_to_replace = '{' + key + '}';
+      console.log("VALUE = ", value);
       value = value.replace(subst_to_replace, substitutes[key]);
     }
     return value;
@@ -505,6 +506,10 @@ function projectBuilder(config) {
   }
 
 
+
+  const DEBUG_NO_MERGE = true;
+
+
   // Checkout to the project branch, then merge the current state with the
   // new one just fetched. This should only be called when
   // 'gitFetchAndDifCheck' indicates a difference.
@@ -517,6 +522,9 @@ function projectBuilder(config) {
       }
       else if (code !== 0) {
         callback('Return code != 0');
+      }
+      else if (DEBUG_NO_MERGE) {
+        callback();
       }
       else {
         execOnLocal(build, repo_path,
