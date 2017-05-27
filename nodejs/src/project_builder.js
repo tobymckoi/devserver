@@ -9,10 +9,11 @@ const spawn = require('child_process').spawn;
 
 // PENDING: Put this into a 'statics.js' module.
 const DEFAULT_REPO_LOCATION = '/var/lib/devserver/repos/';
+const BUILD_RECORDS_LOCATION = '/var/lib/devserver/reports/';
 
 // Set this to 'true' for 'git merge' command to be skipped. This
 // can be useful for debugging the build process.
-const DEBUG_NO_MERGE = false;
+const DEBUG_NO_MERGE = true;
 
 
 
@@ -168,31 +169,77 @@ function projectBuilder(config) {
 
 
 
-
-  function fileBuildSuccess(repo_path, build, callback) {
-
-    console.log("$$$ Build Success START: %s", repo_path);
-    const chunks = build.out_chunks;
-    chunks.forEach( (chunk) => {
-      process[chunk.type].write(chunk.data);
+  function writeChunksToFile(output_file, repo_path, build, callback) {
+    const out_path = path.dirname(output_file);
+    let cb_called = false;
+    fse.ensureDir(out_path, (err) => {
+      if (err) {
+        // Ignore,
+        console.error(err);
+      }
+      const chunks = build.out_chunks;
+      try {
+        const logstream = fs.createWriteStream(output_file);
+        logstream.on('drain', pushChunks);
+        logstream.on('error', (err) => {
+          if (!cb_called) {
+            cb_called = true;
+            callback(err);
+          }
+        });
+        let i = 0;
+        function pushChunks() {
+          let write_more = true;
+          // Write chunks until we reach the end,
+          while (i < chunks.length && write_more) {
+            write_more = logstream.write(chunks[i].data);
+            ++i;
+          }
+          if (i >= chunks.length) {
+            logstream.end();
+            if (!cb_called) {
+              cb_called = true;
+              callback();
+            }
+          }
+        }
+        // Start pushing chunks to the file,
+        pushChunks();
+      }
+      catch (e) {
+        callback(e);
+      }
     });
-    console.log("$$$ Build Success END: %s", repo_path);
+  }
 
-    callback();
+
+
+  function fileBuildSuccess(repo_path, build, repo_ob, callback) {
+
+    // Make an appropriate filename for the reports directory,
+    let build_report_name = repo_ob.branch + '.' + repo_ob.gitname;
+    // Sanitize it,
+    build_report_name = build_report_name.replace('/', '-');
+    build_report_name = build_report_name.replace('\\', '-');
+
+    const build_report_path = path.join(BUILD_RECORDS_LOCATION, build_report_name);
+
+    writeChunksToFile(build_report_path, repo_path, build, callback);
 
   }
 
 
-  function fileBuildFailure(repo_path, build, callback) {
+  function fileBuildFailure(repo_path, build, repo_ob, callback) {
 
-    console.log("BUILD FAILED START: %s", repo_path);
-    const chunks = build.out_chunks;
-    chunks.forEach( (chunk) => {
-      process[chunk.type].write(chunk.data);
-    });
-    console.log("BUILD FAILED END: %s", repo_path);
+    // Make an appropriate filename for the reports directory,
+    let build_report_name = repo_ob.branch + '.' + repo_ob.gitname;
+    // Sanitize it,
+    build_report_name = build_report_name.replace('/', '-');
+    build_report_name = build_report_name.replace('\\', '-');
 
-    callback();
+    const build_report_path = path.join(BUILD_RECORDS_LOCATION, build_report_name);
+
+    writeChunksToFile(build_report_path, repo_path, build, callback);
 
   }
 
@@ -207,9 +254,9 @@ function projectBuilder(config) {
     });
   }
 
-  function handleBuildFail(build, repo_path, callback) {
+  function handleBuildFail(build, repo_path, repo_ob, callback) {
     // File that the build failed,
-    fileBuildFailure(repo_path, build, (err) => {
+    fileBuildFailure(repo_path, build, repo_ob, (err) => {
       build.in_progress = false;
       delete current_build_status[repo_path];
 
@@ -275,7 +322,9 @@ function projectBuilder(config) {
       // than the remote.
       gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
         if (err) {
-          handleBuildFail(current_build, repo_path, () => {
+          writeToBuildLog(current_build, 'Error during git fetch.\n');
+          writeToBuildLog(current_build, '%s\n', err);
+          handleBuildFail(current_build, repo_path, repo_ob, () => {
             callCallbackOn(current_build.callbacks, err);
           });
         }
@@ -286,7 +335,9 @@ function projectBuilder(config) {
           // Run 'checkout' then 'merge'
           gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
             if (err) {
-              handleBuildFail(current_build, repo_path, () => {
+              writeToBuildLog(current_build, 'Error during git checkout and merge.\n');
+              writeToBuildLog(current_build, '%s\n', err);
+              handleBuildFail(current_build, repo_path, repo_ob, () => {
                 callCallbackOn(current_build.callbacks, err);
               });
             }
@@ -302,12 +353,12 @@ function projectBuilder(config) {
         else {
           // No differences,
           writeToBuildLog(current_build, 'No Differences.\n');
-          fileBuildSuccess(repo_path, current_build, () => {
+//          fileBuildSuccess(repo_path, current_build, repo_ob, () => {
             current_build.in_progress = false;
             delete current_build_status[repo_path];
             callCallbackOn(current_build.callbacks, undefined,
                      util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-          });
+//          });
         }
       });
 
@@ -406,13 +457,15 @@ function projectBuilder(config) {
         function dof() {
           if (i >= tobuild_list.length) {
             if (has_failure) {
-              handleBuildFail(current_build, repo_path, () => {
+              writeToBuildLog(current_build, 'Error during project build.\n');
+              writeToBuildLog(current_build, '%s\n', last_failure);
+              handleBuildFail(current_build, repo_path, repo_ob, () => {
                 callCallbackOn(current_build.callbacks, last_failure);
               });
             }
             else {
               // File success report,
-              fileBuildSuccess(repo_path, current_build, () => {
+              fileBuildSuccess(repo_path, current_build, repo_ob, () => {
                 current_build.in_progress = false;
                 delete current_build_status[repo_path];
                 callCallbackOn(current_build.callbacks, undefined,
@@ -438,13 +491,15 @@ function projectBuilder(config) {
       else {
         performBuild( {}, (err) => {
           if (err) {
-            handleBuildFail(current_build, repo_path, () => {
+            writeToBuildLog(current_build, 'Error during project build.\n');
+            writeToBuildLog(current_build, '%s\n', err);
+            handleBuildFail(current_build, repo_path, repo_ob, () => {
               callCallbackOn(current_build.callbacks, err);
             });
           }
           else {
             // File success report,
-            fileBuildSuccess(repo_path, current_build, () => {
+            fileBuildSuccess(repo_path, current_build, repo_ob, () => {
               current_build.in_progress = false;
               delete current_build_status[repo_path];
               callCallbackOn(current_build.callbacks, undefined,
@@ -457,13 +512,14 @@ function projectBuilder(config) {
 
     }
     else {
+      // No build type,
       // File success report,
-      fileBuildSuccess(repo_path, current_build, () => {
+//      fileBuildSuccess(repo_path, current_build, repo_ob, () => {
         current_build.in_progress = false;
         delete current_build_status[repo_path];
         callCallbackOn(current_build.callbacks, undefined,
                  util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-      });
+//      });
     }
 
   }
