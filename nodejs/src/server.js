@@ -25,51 +25,43 @@
 
 module.exports = {
 
-    // This host name.
+    // This host name,
+    hostname: << FQDN hostname (eg. 'rep.example.com') >>,
 
-    hostname: 'mydev.example.com',
-
+    // The port to bind the https web service to,
+    port: 2500,
 
     // Full chain and private key for SSL encryption.
     // (Example uses letsencrypt keys).
 
-    ssl_cert: '/etc/letsencrypt/live/mydev.example.com/fullchain.pem',
-    ssl_key: '/etc/letsencrypt/live/mydev.example.com/privkey.pem',
+    ssl_cert: '/etc/letsencrypt/live/rep.example.com/fullchain.pem',
+    ssl_key: '/etc/letsencrypt/live/rep.example.com/privkey.pem',
 
+    // General site password for getting to the site. Doesn't need to
+    // be too secure because we can't change the state dangerously with
+    // this password. It's only used to protect again general snooping.
+    site_user: << General site user name >>,
+    site_pass: << General site password >>,
 
-    // The username and password for access to the stats.
+    // Docker registry authentication,
+    docker_registry: << Docker registry (eg. 'rep.example.com') >>,
+    docker_user: << Registry username >>,
+    docker_pass: << Registry password >>,
 
-    site_user: << Enter User Name >>,
-    site_pass: << Enter Password >>,
-
-
-    // The port to bind the https web service to.
-    // Used for administration.
-
-    port: 2500,
-
-
-    // The repositories. These repositories must be located in the
-    // '/var/lib/devserver/repos/' directory. The projects must
-    // have been already cloned.
-
-    docker_registry: << Docker registry >>,
-    docker_user: << Docker repository username >>,
-    docker_pass: << Docker repository password >>
-
+    // The repositories,
     repositories: [
-        {   // Located at /var/lib/devserver/repos/hwserver/
-            gitname: 'hwserver',
+        {   gitname: << Git repo name >>,
             branch: 'master',
-            dockertag: 'mydev.example.com/toby/hwserver:latest'
+            // Testing fixture,
+            test_fixture: 'test_fixture.js',
+            // Temporary for testing only,
+            build: 'docker',
+            docker_tobuild: [ {
+                docker_path: '{repo_path}',
+                docker_tag: 'rep.example.com/devp/example:latest'
+            } ]
         },
-        {   // Located at /var/lib/devserver/repos/awesome/
-            gitname: 'awesome',
-            branch: 'develop',
-            dockertag: 'mydev.example.com/toby/awesome:latest'
-        }
     ]
-
 };
 */
 
