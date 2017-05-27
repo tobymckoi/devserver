@@ -218,6 +218,18 @@ function projectBuilder(config) {
   }
 
 
+
+  // Replaces inline variables in the string. For example, the
+  // value of '{repo_path}/nodejs' would get fully qualified.
+  function substituteInline(value, substitutes) {
+    for (let key in substitutes) {
+      const subst_to_replace = '{' + key + '}';
+      value = value.replace(subst_to_replace, substitutes[key]);
+    }
+    return value;
+  }
+
+
   // Builds the project from the given 'repo_path'. The 'repo_path'
   // string points to the location of the git repository stored
   // locally.
@@ -312,17 +324,21 @@ function projectBuilder(config) {
         new_env[key] = process.env[key];
       }
 
+      const substitutes = {
+        repo_path: repo_path
+      };
+
       // Collect the fields necessary to support this build type from
       // the configuration,
       const key_type = build_type + '_';
       for (let key in cur_config) {
         if (key.startsWith(key_type)) {
-          new_env[key] = cur_config[key];
+          new_env[key] = substituteInline(cur_config[key], substitutes);
         }
       }
       for (let key in repo_ob) {
         if (key.startsWith(key_type)) {
-          new_env[key] = repo_ob[key];
+          new_env[key] = substituteInline(repo_ob[key], substitutes);
         }
       }
       new_env['repo_path'] = repo_path;
@@ -349,7 +365,7 @@ function projectBuilder(config) {
           else {
             const copts = JSON.parse(JSON.stringify(options));
             for (let key in extra_envs) {
-              copts.env[key] = extra_envs[key];
+              copts.env[key] = substituteInline(extra_envs[key], substitutes);
             }
 
             // Run the build script,
