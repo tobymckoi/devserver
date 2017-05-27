@@ -10,6 +10,12 @@ const spawn = require('child_process').spawn;
 // PENDING: Put this into a 'statics.js' module.
 const DEFAULT_REPO_LOCATION = '/var/lib/devserver/repos/';
 
+// Set this to 'true' for 'git merge' command to be skipped. This
+// can be useful for debugging the build process.
+const DEBUG_NO_MERGE = false;
+
+
+
 
 // Monitors projects in the git repository directory and when the
 // remote is updated, builds the Docker image and pushes it to
@@ -222,10 +228,11 @@ function projectBuilder(config) {
   // Replaces inline variables in the string. For example, the
   // value of '{repo_path}/nodejs' would get fully qualified.
   function substituteInline(value, substitutes) {
-    for (let key in substitutes) {
-      const subst_to_replace = '{' + key + '}';
-      console.log("VALUE = ", value);
-      value = value.replace(subst_to_replace, substitutes[key]);
+    if (typeof value === 'string') {
+      for (let key in substitutes) {
+        const subst_to_replace = '{' + key + '}';
+        value = value.replace(subst_to_replace, substitutes[key]);
+      }
     }
     return value;
   }
@@ -505,9 +512,6 @@ function projectBuilder(config) {
     });
   }
 
-
-
-  const DEBUG_NO_MERGE = true;
 
 
   // Checkout to the project branch, then merge the current state with the
