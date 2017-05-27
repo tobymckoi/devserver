@@ -13,7 +13,7 @@ const BUILD_RECORDS_LOCATION = '/var/lib/devserver/reports/';
 
 // Set this to 'true' for 'git merge' command to be skipped. This
 // can be useful for debugging the build process.
-const DEBUG_NO_MERGE = true;
+const DEBUG_NO_MERGE = false;
 
 
 
@@ -27,7 +27,6 @@ function projectBuilder(config) {
 
   // Keeps track of all projects currently build built.
   const current_build_status = {};
-
 
   // Ensure the given file name is executable,
   function ensureExec(filename, callback) {
@@ -353,12 +352,10 @@ function projectBuilder(config) {
         else {
           // No differences,
           writeToBuildLog(current_build, 'No Differences.\n');
-//          fileBuildSuccess(repo_path, current_build, repo_ob, () => {
-            current_build.in_progress = false;
-            delete current_build_status[repo_path];
-            callCallbackOn(current_build.callbacks, undefined,
-                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//          });
+          current_build.in_progress = false;
+          delete current_build_status[repo_path];
+          callCallbackOn(current_build.callbacks, undefined,
+              util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
         }
       });
 
@@ -372,6 +369,8 @@ function projectBuilder(config) {
   // varies depending on the project configuration.
 
   function runBuildScript(cur_config, current_build, repo_path, repo_ob) {
+
+    console.log("Building: %s", repo_path);
 
     // What's the build type?
     const build_type = repo_ob.build;
@@ -457,6 +456,7 @@ function projectBuilder(config) {
         function dof() {
           if (i >= tobuild_list.length) {
             if (has_failure) {
+              console.log("Build failed");
               writeToBuildLog(current_build, 'Error during project build.\n');
               writeToBuildLog(current_build, '%s\n', last_failure);
               handleBuildFail(current_build, repo_path, repo_ob, () => {
@@ -491,6 +491,7 @@ function projectBuilder(config) {
       else {
         performBuild( {}, (err) => {
           if (err) {
+            console.log("Build failed");
             writeToBuildLog(current_build, 'Error during project build.\n');
             writeToBuildLog(current_build, '%s\n', err);
             handleBuildFail(current_build, repo_path, repo_ob, () => {
@@ -509,17 +510,14 @@ function projectBuilder(config) {
         });
       }
 
-
     }
     else {
       // No build type,
       // File success report,
-//      fileBuildSuccess(repo_path, current_build, repo_ob, () => {
-        current_build.in_progress = false;
-        delete current_build_status[repo_path];
-        callCallbackOn(current_build.callbacks, undefined,
-                 util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//      });
+      current_build.in_progress = false;
+      delete current_build_status[repo_path];
+      callCallbackOn(current_build.callbacks, undefined,
+               util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
     }
 
   }
@@ -557,7 +555,7 @@ function projectBuilder(config) {
             else {
               const latest_hash = lines[1];
               const current_hash = lines[2];
-              console.log("Current: %s, Latest: %s", current_hash, latest_hash);
+//              console.log("Current: %s, Latest: %s", current_hash, latest_hash);
               let different = (latest_hash !== current_hash);
               callback(undefined, different);
             }
