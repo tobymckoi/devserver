@@ -456,7 +456,7 @@ function projectBuilder(config) {
         function dof() {
           if (i >= tobuild_list.length) {
             if (has_failure) {
-              console.log("Build failed");
+              console.log("Build failed.");
               writeToBuildLog(current_build, 'Error during project build.\n');
               writeToBuildLog(current_build, '%s\n', last_failure);
               handleBuildFail(current_build, repo_path, repo_ob, () => {
@@ -466,6 +466,7 @@ function projectBuilder(config) {
             else {
               // File success report,
               fileBuildSuccess(repo_path, current_build, repo_ob, () => {
+                console.log("Build complete.");
                 current_build.in_progress = false;
                 delete current_build_status[repo_path];
                 callCallbackOn(current_build.callbacks, undefined,
@@ -491,7 +492,7 @@ function projectBuilder(config) {
       else {
         performBuild( {}, (err) => {
           if (err) {
-            console.log("Build failed");
+            console.log("Build failed.");
             writeToBuildLog(current_build, 'Error during project build.\n');
             writeToBuildLog(current_build, '%s\n', err);
             handleBuildFail(current_build, repo_path, repo_ob, () => {
@@ -501,6 +502,7 @@ function projectBuilder(config) {
           else {
             // File success report,
             fileBuildSuccess(repo_path, current_build, repo_ob, () => {
+              console.log("Build complete.");
               current_build.in_progress = false;
               delete current_build_status[repo_path];
               callCallbackOn(current_build.callbacks, undefined,
