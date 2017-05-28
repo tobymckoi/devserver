@@ -95,6 +95,7 @@ const fs = require('fs');
 const fse = require('fs-extra');
 const https = require('https');
 const express = require('express');
+const bodyParser = require('body-parser');
 
 // Check required files exist,
 
@@ -103,6 +104,7 @@ const CONFIG_FILE = '/var/lib/devserver/config.js';
 const config = {};
 
 const projectBuilder = require('./project_builder.js')(config);
+const web_hook_handler = require('./github_webhook.js')(config, projectBuilder);
 
 
 // Ensure the configuration file exists.
@@ -166,6 +168,9 @@ const app = express();
 
 function startService() {
 
+  // WebHook route from GitHub,
+  app.post('/gh/webhook/ep', web_hook_handler);
+
   // Define all the HTTP routes,
   app.get('/', (req, res) => {
 
@@ -174,6 +179,10 @@ function startService() {
     res.end(output);
 
   });
+
+
+
+
 
   // Put server into a restart loop, this allows certs to renew while staying
   // online.

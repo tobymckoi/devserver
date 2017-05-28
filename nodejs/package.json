@@ -9,6 +9,7 @@
   "author": "Tobias Downer",
   "license": "MIT",
   "dependencies": {
+    "body-parser": "^1.17.2",
     "express": "^4.15.3",
     "fs-extra": "^3.0.1"
   }
