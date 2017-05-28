@@ -25,15 +25,30 @@ function signBlob (key, bodyv) {
 }
 
 
-function gitHubHandler(config, projectBuilder) {
+function gitHubHandler(config, project_builder) {
 
+  // Called when the web hook from GitHub has been verified against
+  // our shared secret.
 
   function handleGitHubCall(event_type, payload) {
     console.log("----- Call from GitHub: %s", event_type);
     console.log(payload);
     console.log("-----");
 
+    // On a push to Git repository,
+    if (event_type === 'push') {
+      // Pull the name of the git project,
+      const gitname = payload.repository.name;
 
+      // Updates the Git project.
+      // Note that this will sequentialize builds if there's already
+      //   an ongoing build process happening.
+      project_builder.updateGitProject(gitname, (err, build_results) => {
+        if (err) {
+          console.error(err);
+        }
+      });
+    }
 
   }
 

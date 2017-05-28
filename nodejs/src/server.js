@@ -103,8 +103,8 @@ const CONFIG_FILE = '/var/lib/devserver/config.js';
 
 const config = {};
 
-const projectBuilder = require('./project_builder.js')(config);
-const web_hook_handler = require('./github_webhook.js')(config, projectBuilder);
+const project_builder = require('./project_builder.js')(config);
+const web_hook_handler = require('./github_webhook.js')(config, project_builder);
 
 
 // Ensure the configuration file exists.
@@ -148,7 +148,7 @@ function configStatusUpdate() {
 
 function pollMonitorProjects() {
   // Monitor and build the projects,
-  projectBuilder.fullPass();
+  project_builder.fullPass();
   // Randomize polls so we don't create resonate spikes in traffic,
   // On average we poll every 5 minutes,
   const poll_timeout = (30000 + (Math.random() * 60000)) * 5;
