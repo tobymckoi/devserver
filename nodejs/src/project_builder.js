@@ -212,6 +212,30 @@ function projectBuilder(config) {
   }
 
 
+  // Returns a build object which is used to keep track of a build
+  // in progress. Only one build object should be active during the
+  // time in which a build is happening.
+
+  function createBuildObject(repo_ob) {
+    const repo_key = repo_ob.branch + '.' + repo_ob.project_git_name;
+    // Fetch 'current_build'
+    let current_build = current_build_status[repo_key];
+    if (current_build === undefined) {
+      // Construct 'current_build' object,
+      current_build = {
+        callbacks: []
+      };
+      current_build_status[repo_key] = current_build;
+    }
+    return current_build;
+  }
+
+  function clearBuildObject(repo_ob) {
+    const repo_key = repo_ob.branch + '.' + repo_ob.project_git_name;
+    delete current_build_status[repo_key];
+  }
+
+
 
   function fileBuildSuccess(repo_path, build, repo_ob, callback) {
 
@@ -257,7 +281,7 @@ function projectBuilder(config) {
     // File that the build failed,
     fileBuildFailure(repo_path, build, repo_ob, (err) => {
       build.in_progress = false;
-      delete current_build_status[repo_path];
+      clearBuildObject(repo_ob);
 
       // If the 'fileBuildFailure' function produces an error then
       // report it to console.error
@@ -294,24 +318,15 @@ function projectBuilder(config) {
   // If the project is currently being built when this is called
   // then callback is only called when the build is complete.
 
-  function buildProject(cur_config, repo_path, repo_ob, callback) {
+  function buildProject(cur_config, current_build, repo_path, repo_ob, callback) {
 
-    const project_branch = repo_ob.branch;
-
-    // Fetch 'current_build'
-    let current_build = current_build_status[repo_path];
-    if (current_build === undefined) {
-      // Construct 'current_build' object,
-      current_build = {
-        callbacks: []
-      };
-      current_build_status[repo_path] = current_build;
-    }
     // Add callback to be notified when build complete,
     current_build.callbacks.push(callback);
 
     // If the current build isn't in progress,
     if (current_build.in_progress !== true) {
+
+      const project_branch = repo_ob.branch;
 
       // Update 'in_progress' status,
       current_build.in_progress = true;
@@ -353,7 +368,7 @@ function projectBuilder(config) {
           // No differences,
           writeToBuildLog(current_build, 'No Differences.\n');
           current_build.in_progress = false;
-          delete current_build_status[repo_path];
+          clearBuildObject(repo_ob);
           callCallbackOn(current_build.callbacks, undefined,
               util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
         }
@@ -468,7 +483,7 @@ function projectBuilder(config) {
               fileBuildSuccess(repo_path, current_build, repo_ob, () => {
                 console.log("Build complete.");
                 current_build.in_progress = false;
-                delete current_build_status[repo_path];
+                clearBuildObject(repo_ob);
                 callCallbackOn(current_build.callbacks, undefined,
                          util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
               });
@@ -504,7 +519,7 @@ function projectBuilder(config) {
             fileBuildSuccess(repo_path, current_build, repo_ob, () => {
               console.log("Build complete.");
               current_build.in_progress = false;
-              delete current_build_status[repo_path];
+              clearBuildObject(repo_ob);
               callCallbackOn(current_build.callbacks, undefined,
                        util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
             });
@@ -517,7 +532,7 @@ function projectBuilder(config) {
       // No build type,
       // File success report,
       current_build.in_progress = false;
-      delete current_build_status[repo_path];
+      clearBuildObject(repo_ob);
       callCallbackOn(current_build.callbacks, undefined,
                util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
     }
@@ -604,21 +619,30 @@ function projectBuilder(config) {
   }
 
 
-  // Scans all the projects. If a project is not currently being built then
-  // attempts to build the project.
 
-  function fullPass(callback) {
-    const cur_config = config.cur;
+  const current_git_builds = {};
+
+
+  function internalUpdateGitProject(cur_config, build_info) {
+
+    // Exit early if no listeners waiting to be notified,
+    if (build_info.waiting.length === 0) {
+      return;
+    }
+
+    console.log("Update git project: %s", build_info.git_name);
+
     // Scan the list of repositories for the configuration,
     const repos = cur_config.repositories;
+
+    const build_result = [];
+
     if (repos !== undefined) {
 
       let repos_path = DEFAULT_REPO_LOCATION;
       if (cur_config.repos_path !== undefined) {
         repos_path = cur_config.repos_path;
       }
-
-      const build_result = [];
 
       // 'fs-extra' bug.
       let first_call = true;
@@ -630,37 +654,208 @@ function projectBuilder(config) {
           if (err) {
             // Ignore this.
           }
+
+          const referenced_projects = [];
+
+          // Discover all 'repo_ob' entries that reference this git
+          // name.
+
           repos.forEach( (repo_ob) => {
+            if (repo_ob.gitname === build_info.git_name) {
+              referenced_projects.push(repo_ob);
+            }
+          });
 
+          referenced_projects.forEach( (repo_ob) => {
             const project_git_name = repo_ob.gitname;
-
             // Form the path,
             const repo_path = path.join(repos_path, project_git_name);
 
+            // Fetch 'current_build'
+            const current_build = createBuildObject(repo_ob);
+
             // Build it,
-            buildProject(cur_config, repo_path, repo_ob, (err, status) => {
+            buildProject(cur_config, current_build,
+                            repo_path, repo_ob, (err, status) => {
               build_result.push({ repo_path, err, status });
               // All projects built?
-              if (build_result.length === repos.length) {
-                // Callback when complete,
+              if (build_result.length === referenced_projects.length) {
+                // Callback on oldest first,
+                const callback = build_info.waiting.shift();
                 if (callback !== undefined) {
                   callback(undefined, build_result);
                 }
+                console.log("Completed update git project: %s", build_info.git_name);
+                // Recurse to see if we need to rebuild because a request
+                // happened while we were building,
+                internalUpdateGitProject(cur_config, build_info);
               }
             });
 
           });
+
         }
       });
+    }
+    else {
+      // No repositories to build,
+      const callback = build_info.waiting.shift();
+      if (callback !== undefined) {
+        callback(undefined, build_result);
+      }
+      console.log("Completed update git project: %s", build_info.git_name);
+      // Recurse to see if we need to rebuild because a request
+      // happened while we were building,
+      internalUpdateGitProject(cur_config, build_info);
     }
   }
 
 
+
+  function updateGitProject(git_name, callback) {
+    // Is this currently being built?
+    let build_info = current_git_builds[git_name];
+    if (build_info === void 0) {
+      build_info = {
+        git_name,
+        waiting: []
+      };
+      current_git_builds[git_name] = build_info;
+    }
+
+    // If there's a waiting list,
+    if (build_info.waiting.length !== 0) {
+      build_info.waiting.push(callback);
+    }
+    else {
+      build_info.waiting.push(callback);
+      const cur_config = config.cur;
+      internalUpdateGitProject(cur_config, build_info);
+    }
+  }
+
+
+
+
+
+  // Scans all the projects. If a project is not currently being built then
+  // attempts to build the project.
+
+  function fullPass(callback) {
+    const cur_config = config.cur;
+    const repos = cur_config.repositories;
+    // List of unique git repositories stored locally,
+    const unique_repos = [];
+    // For each repository defined in the configuration,
+    // Pick out list of unique named git repositories.
+    repos.forEach( (repo_ob) => {
+      let contains = false;
+      for (let i = 0; i < unique_repos.length; ++i) {
+        if (repo_ob.gitname === unique_repos[i]) {
+          contains = true;
+          break;
+        }
+      }
+      if (!contains) {
+        unique_repos.push(repo_ob.gitname);
+      }
+    });
+
+    // Go build them,
+    const build_results = [];
+    if (unique_repos.length === 0) {
+      callback(undefined, build_results);
+    }
+    else {
+      // Go check/build all the repos,
+      unique_repos.forEach( (gitname) => {
+        updateGitProject(gitname, (err, status) => {
+          build_results.push({ gitname, err, status });
+          if (build_results.length === unique_repos.length) {
+            if (callback !== undefined) {
+              callback(undefined, build_results);
+            }
+          }
+        });
+      });
+    }
+
+  }
+
+
+
+  // function fullPass(callback) {
+  //   const cur_config = config.cur;
+  //   // Scan the list of repositories for the configuration,
+  //   const repos = cur_config.repositories;
+  //
+  //   const build_result = [];
+  //
+  //   if (repos !== undefined) {
+  //
+  //     let repos_path = DEFAULT_REPO_LOCATION;
+  //     if (cur_config.repos_path !== undefined) {
+  //       repos_path = cur_config.repos_path;
+  //     }
+  //
+  //     // 'fs-extra' bug.
+  //     let first_call = true;
+  //
+  //     // The repos are within the /var/lib/devserver/repos/ path.
+  //     fse.ensureDir(repos_path, (err) => {
+  //       if (first_call === true) {
+  //         first_call = false;
+  //         if (err) {
+  //           // Ignore this.
+  //         }
+  //         repos.forEach( (repo_ob) => {
+  //
+  //           const project_git_name = repo_ob.gitname;
+  //
+  //           // Form the path,
+  //           const repo_path = path.join(repos_path, project_git_name);
+  //
+  //           // Fetch 'current_build'
+  //           const current_build = createBuildObject(repo_ob);
+  //
+  //           // Build it,
+  //           buildProject(cur_config, current_build,
+  //                           repo_path, repo_ob, (err, status) => {
+  //             build_result.push({ repo_path, err, status });
+  //             // All projects built?
+  //             if (build_result.length === repos.length) {
+  //               // Callback when complete,
+  //               if (callback !== undefined) {
+  //                 callback(undefined, build_result);
+  //               }
+  //             }
+  //           });
+  //
+  //         });
+  //       }
+  //     });
+  //   }
+  //   else {
+  //     // No repositories to build,
+  //     callback(undefined, build_result);
+  //   }
+  // }
+
+
   // Exported API
   return {
+    // Updates all projects that directly reference the given git
+    // repository in the repositories directory. This would
+    // typically be called via a webhook from the hub after
+    // changes have been pushed.
+    updateGitProject,
+
     // Performs a single project monitor pass. This looks at the
     // repositories from the configuration and runs a 'git pull'
     // and 'git checkout [branch]' for each.
+    // If a project is currently being built then this will skip
+    // the build call on this project but will still return the
+    // status of the built project when it completes.
     fullPass
   };
 }
