@@ -32,8 +32,8 @@ function gitHubHandler(config, project_builder) {
 
   function handleGitHubCall(event_type, payload) {
     console.log("----- Call from GitHub: %s", event_type);
-    console.log(payload);
-    console.log("-----");
+//    console.log(payload);
+//    console.log("-----");
 
     // On a push to Git repository,
     if (event_type === 'push') {
