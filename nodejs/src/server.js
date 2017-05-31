@@ -105,6 +105,7 @@ const config = {};
 
 const project_builder = require('./project_builder.js')(config);
 const web_hook_handler = require('./github_webhook.js')(config, project_builder);
+const projects_view_handler = require('./projects_view.js')(config, project_builder);
 
 
 // Ensure the configuration file exists.
@@ -172,13 +173,7 @@ function startService() {
   app.post('/gh/webhook/ep', web_hook_handler);
 
   // Define all the HTTP routes,
-  app.get('/', (req, res) => {
-
-    const output = util.format("%s says 'Hello!'", config.cur.hostname);
-
-    res.end(output);
-
-  });
+  app.get('/pjs/:page?', projects_view_handler);
 
 
 

@@ -1,0 +1,12 @@
+body {
+    background-color: #f3f1dc;
+    font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    font-size: 1.25em;
+}
+
+table.project_list td {
+  padding: 2px 8px 2px 8px;
+}
+table.project_list td.project_name {
+  padding: 24px 0px 2px 0px;
+}

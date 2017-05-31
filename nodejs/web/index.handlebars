@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>{{page_title}}</title>
+  <meta content="text/html; charset=UTF-8" http-equiv="Content-Type">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="style.css" media="all" rel="stylesheet" type="text/css"/>
+</head>
+<body>
+  <h3>{{config.company_name}} Projects</h3>
+
+  <table class='project_list'>
+  {{#list projects}}
+    <tr><td class='project_name' colspan='3'>{{name}}</td></tr>
+    <tr>
+      <td class='project_dev_site'>{{optionlink development_url 'Dev Staging Server'}}</td>
+      <td class='project_builds_log'>{{optionlink build_report_url 'Build Log'}}</td>
+      <td class='project_tests_log'>{{optionlink test_report_url 'CI Test'}}</td>
+    </tr>
+  {{/list}}
+  </table>
+
+</body>
+</html>
