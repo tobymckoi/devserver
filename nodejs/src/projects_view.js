@@ -5,6 +5,10 @@ const fs = require('fs');
 const Handlebars = require('handlebars');
 const path = require('path');
 
+const ansiToHTML = require('./ansi_to_html.js').toHTML;
+
+const STATICS = require('./statics.js');
+
 
 
 // Unformated list,
@@ -59,26 +63,83 @@ function projectsViewHandler(config, project_builder) {
     const repos = config.cur.repositories;
     const projects = [];
     repos.forEach( (repo) => {
-      const unique_repo_key = repo.gitname + '.' + repo.branch;
+      const unique_repo_key = repo.branch + "." + repo.gitname;
       projects.push({
         name: repo.name,
         development_url: repo.development_url,
-        build_report_url: 'buildlog/' + encodeURIComponent(unique_repo_key),
-        test_report_url: 'testreport/' + encodeURIComponent(unique_repo_key),
+        build_report_url: 'buildlog?r=' + encodeURIComponent(unique_repo_key),
+        test_report_url: 'testreport?r=' + encodeURIComponent(unique_repo_key),
       });
     });
     args.projects = projects;
 
     toStaticPage('index.handlebars', args, (err, html) => {
-      res.end(html);
+      if (err) {
+        console.error(err.stack);
+        res.status(500).send('Script failed. See logs.');
+      }
+      else {
+        res.end(html);
+      }
     });
   }
 
 
-  // Page that views all projects and provides links to drill down
-  // into them.
-  function viewProjects(req, res) {
+  // Views the build log for the given repository,
+  function viewBuildLog(req, res, repo_key) {
 
+    const repos = config.cur.repositories;
+    let matched_repo;
+    for (let i = 0; i < repos.length; ++i) {
+      const repo = repos[i];
+      const unique_repo_key = repo.branch + "." + repo.gitname;
+      if (repo_key === unique_repo_key) {
+        matched_repo = repo;
+        break;
+      }
+    }
+
+    // Build the report content,
+    const report_file = STATICS.toReportPath(
+              matched_repo.gitname, matched_repo.branch);
+
+    fs.stat(report_file, (err, stats) => {
+      fs.readFile(report_file, 'utf8', (err, content) => {
+        let report_content;
+        if (err) {
+          report_content = 'No build report currently available.';
+        }
+        else {
+          // Convert the Unix ANSI content to HTML,
+          report_content = ansiToHTML(content);
+        }
+
+        const args = {
+          config: config.cur,
+          page_title: 'Build Log',
+          report_content: report_content,
+          repo: matched_repo,
+          mtime: stats ? util.inspect(stats.mtime) : ''
+        };
+
+        toStaticPage('buildlog.handlebars', args, (err, html) => {
+          if (err) {
+            console.error(err.stack);
+            res.status(500).send('Script failed. See logs.');
+          }
+          else {
+            res.end(html);
+          }
+        });
+      });
+    });
+
+  }
+
+
+
+  function viewTestReport(req, res, repo_key) {
+    res.end('View Test Report Output... ' + repo_key);
   }
 
 
@@ -111,12 +172,16 @@ function projectsViewHandler(config, project_builder) {
     else {
       switch (page) {
         // View projects,
-        case 'view':
-          viewProjects(req, res);
-          break;
-
         case 'dump':
           res.end(util.format(req));
+          break;
+
+        case 'buildlog':
+          viewBuildLog(req, res, req.query.r);
+          break;
+
+        case 'testreport':
+          viewTestReport(req, res, req.query.r);
           break;
 
         case 'style.css':

@@ -1,11 +1,134 @@
 body {
     background-color: #f3f1dc;
     font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
-    font-size: 1.25em;
+    font-size: 1.15em;
 }
 
+a:link, a:visited {
+    color: blue;
+}
+
+div.report_content {
+  color: black;
+  background-color: white;
+  border: 2px solid gray;
+  padding: 1px 12px 1px 12px;
+  font-size: 0.85em;
+}
+
+div.report_content pre {
+  white-space: pre-wrap;
+}
+
+
+/* ANSI Foreground color codes */
+.fhiblack {
+  color: black;
+}
+.fhired {
+  color: red;
+}
+.fhigreen {
+  color: green;
+}
+.fhiyellow {
+  color: yellow;
+}
+.fhiblue {
+  color: blue;
+}
+.fhimagenta {
+  color: magenta;
+}
+.fhicyan {
+  color: cyan;
+}
+.fhiwhite {
+  color: white;
+}
+
+/* ANSI Background color codes */
+.bhiblack {
+  background-color: black;
+}
+.bhired {
+  background-color: red;
+}
+.bhigreen {
+  background-color: green;
+}
+.bhiyellow {
+  background-color: yellow;
+}
+.bhiblue {
+  background-color: blue;
+}
+.bhimagenta {
+  background-color: magenta;
+}
+.bhicyan {
+  background-color: cyan;
+}
+.bhiwhite {
+  background-color: white;
+}
+
+/* Low intensity */
+.fliblack {
+  color: darkGray;
+}
+.flired {
+  color: darkRed;
+}
+.fligreen {
+  color: darkGreen;
+}
+.fliyellow {
+  color: darkGoldenRod;
+}
+.fliblue {
+  color: darkBlue;
+}
+.flimagenta {
+  color: darkMagenta;
+}
+.flicyan {
+  color: darkCyan;
+}
+.fliwhite {
+  color: lightGray;
+}
+
+/* Low intensity */
+.bliblack {
+  background-color: darkGray;
+}
+.blired {
+  background-color: darkRed;
+}
+.bligreen {
+  background-color: darkGreen;
+}
+.bliyellow {
+  background-color: darkGoldenRod;
+}
+.bliblue {
+  background-color: darkBlue;
+}
+.blimagenta {
+  background-color: darkMagenta;
+}
+.blicyan {
+  background-color: darkCyan;
+}
+.bliwhite {
+  background-color: lightGray;
+}
+
+
+
 table.project_list td {
-  padding: 2px 8px 2px 8px;
+  padding: 2px 6px 2px 6px;
 }
 table.project_list td.project_name {
   padding: 24px 0px 2px 0px;

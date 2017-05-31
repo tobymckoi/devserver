@@ -7,9 +7,7 @@ const fse = require('fs-extra');
 
 const spawn = require('child_process').spawn;
 
-// PENDING: Put this into a 'statics.js' module.
-const DEFAULT_REPO_LOCATION = '/var/lib/devserver/repos/';
-const BUILD_RECORDS_LOCATION = '/var/lib/devserver/reports/';
+const STATICS = require('./statics.js');
 
 // Set this to 'true' for 'git merge' command to be skipped. This
 // can be useful for debugging the build process.
@@ -238,32 +236,16 @@ function projectBuilder(config) {
 
 
   function fileBuildSuccess(repo_path, build, repo_ob, callback) {
-
-    // Make an appropriate filename for the reports directory,
-    let build_report_name = repo_ob.branch + '.' + repo_ob.gitname;
-    // Sanitize it,
-    build_report_name = build_report_name.replace('/', '-');
-    build_report_name = build_report_name.replace('\\', '-');
-
-    const build_report_path = path.join(BUILD_RECORDS_LOCATION, build_report_name);
-
+    const build_report_path =
+              STATICS.toReportPath(repo_ob.gitname, repo_ob.branch);
     writeChunksToFile(build_report_path, repo_path, build, callback);
-
   }
 
 
   function fileBuildFailure(repo_path, build, repo_ob, callback) {
-
-    // Make an appropriate filename for the reports directory,
-    let build_report_name = repo_ob.branch + '.' + repo_ob.gitname;
-    // Sanitize it,
-    build_report_name = build_report_name.replace('/', '-');
-    build_report_name = build_report_name.replace('\\', '-');
-
-    const build_report_path = path.join(BUILD_RECORDS_LOCATION, build_report_name);
-
+    const build_report_path =
+              STATICS.toReportPath(repo_ob.gitname, repo_ob.branch);
     writeChunksToFile(build_report_path, repo_path, build, callback);
-
   }
 
 
@@ -639,7 +621,7 @@ function projectBuilder(config) {
 
     if (repos !== undefined) {
 
-      let repos_path = DEFAULT_REPO_LOCATION;
+      let repos_path = STATICS.DEFAULT_REPO_LOCATION;
       if (cur_config.repos_path !== undefined) {
         repos_path = cur_config.repos_path;
       }

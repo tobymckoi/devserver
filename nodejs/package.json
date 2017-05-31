@@ -12,6 +12,7 @@
     "body-parser": "1.17.2",
     "express": "4.15.3",
     "fs-extra": "3.0.1",
-    "handlebars": "4.0.10"
+    "handlebars": "4.0.10",
+    "node-ansiparser": "2.2.0"
   }
 }

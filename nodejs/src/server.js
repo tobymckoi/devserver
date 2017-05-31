@@ -92,14 +92,14 @@ module.exports = {
 
 const util = require('util');
 const fs = require('fs');
-const fse = require('fs-extra');
 const https = require('https');
 const express = require('express');
-const bodyParser = require('body-parser');
+
+const STATICS = require('./statics.js');
 
 // Check required files exist,
 
-const CONFIG_FILE = '/var/lib/devserver/config.js';
+const CONFIG_FILE = STATICS.CONFIG_FILE;
 
 const config = {};
 
@@ -109,9 +109,9 @@ const projects_view_handler = require('./projects_view.js')(config, project_buil
 
 
 // Ensure the configuration file exists.
-fse.ensureFile(CONFIG_FILE, (err) => {
+fs.access(CONFIG_FILE, fs.F_OK | fs.R_OK, (err) => {
   if (err) {
-    console.error(util.format('ensureFile output: %j', err));
+    console.error(util.format('fs.access output: %j', err));
     console.error(util.format("%s not found.", CONFIG_FILE));
     process.exit(-1);
   }
@@ -123,9 +123,19 @@ fse.ensureFile(CONFIG_FILE, (err) => {
     // Watch the config file. When it changes then update 'config'.
     fs.watch(CONFIG_FILE, () => {
       setTimeout( () => {
-        delete require.cache[require.resolve(CONFIG_FILE)];
-        config.cur = require(CONFIG_FILE);
-        configStatusUpdate();
+        const remembered_config = config.cur;
+        try {
+          delete require.cache[require.resolve(CONFIG_FILE)];
+          config.cur = require(CONFIG_FILE);
+          configStatusUpdate();
+        }
+        catch (e) {
+          // Reset configuration on error,
+          config.cur = remembered_config;
+          console.error("Failed to load configuration");
+          console.error(e);
+          console.error("Continuing to use previous configuration.");
+        }
       }, 50);
     });
 
@@ -141,7 +151,11 @@ fse.ensureFile(CONFIG_FILE, (err) => {
 function configStatusUpdate() {
   console.log("LOADED %s", CONFIG_FILE);
   if (config.cur.repositories !== undefined) {
-    console.log("  Repositories monitored: %j", config.cur.repositories);
+    const repo_names = [];
+    config.cur.repositories.forEach( (repo) => {
+      repo_names.push(repo.name);
+    });
+    console.log("  Repositories monitored: %j", repo_names);
   }
 }
 
