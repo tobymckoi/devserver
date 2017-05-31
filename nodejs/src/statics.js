@@ -3,25 +3,38 @@
 const path = require('path');
 
 
+// The base system path location,
+const BASE_SYS = '/var/lib/devserver/';
+
 // Location of the global configuration file,
-const CONFIG_FILE = '/var/lib/devserver/config.js';
+const CONFIG_FILE = path.join(BASE_SYS, 'config.js');
 
 // Git Repositories path,
-const DEFAULT_REPO_LOCATION = '/var/lib/devserver/repos/';
+const DEFAULT_REPO_LOCATION = path.join(BASE_SYS, 'repos/');
 
-// Reports path,
-const BUILD_RECORDS_LOCATION = '/var/lib/devserver/reports/';
+// Build reports path,
+const BUILD_RECORDS_LOCATION = path.join(BASE_SYS, 'reports/');
+
+// Test reports path,
+const TEST_REPORTS_LOCATION = path.join(BASE_SYS, 'tests/');
 
 
-function toReportPath(gitname, branch) {
+function toReportName(gitname, branch) {
   // Make an appropriate filename for the reports directory,
   let build_report_name = branch + '.' + gitname;
   // Sanitize it,
   build_report_name = build_report_name.replace('/', '-');
   build_report_name = build_report_name.replace('\\', '-');
-  return path.join(BUILD_RECORDS_LOCATION, build_report_name);
+  return build_report_name;
 }
 
+function toBuildReportPath(gitname, branch) {
+  return path.join(BUILD_RECORDS_LOCATION, toReportName(gitname, branch));
+}
+
+function toTestReportPath(gitname, branch) {
+  return path.join(TEST_REPORTS_LOCATION, toReportName(gitname, branch));
+}
 
 module.exports = {
 
@@ -34,6 +47,13 @@ module.exports = {
   // Reports path,
   BUILD_RECORDS_LOCATION,
 
-  toReportPath,
+  // Test results path,
+  TEST_REPORTS_LOCATION,
+
+  // Given gitname and branch, returns a unique identifier for build report,
+  toBuildReportPath,
+
+  // Given gitname and branch, returns a unique identifier for test report,
+  toTestReportPath,
 
 };

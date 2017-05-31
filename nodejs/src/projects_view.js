@@ -17,7 +17,7 @@ Handlebars.registerHelper('list', (items, options) => {
 //  console.log('options=', options);
   let out = "";
   for (let i = 0; i < items.length; ++i) {
-    out = out + options.fn(items[i]);
+    out += options.fn(items[i]);
   }
   return out;
 });
@@ -84,23 +84,26 @@ function projectsViewHandler(config, project_builder) {
     });
   }
 
-
-  // Views the build log for the given repository,
-  function viewBuildLog(req, res, repo_key) {
-
+  function findMatchingRepositoryKey(repo_key) {
     const repos = config.cur.repositories;
-    let matched_repo;
     for (let i = 0; i < repos.length; ++i) {
       const repo = repos[i];
       const unique_repo_key = repo.branch + "." + repo.gitname;
       if (repo_key === unique_repo_key) {
-        matched_repo = repo;
-        break;
+        return repo;
       }
     }
+    return;
+  }
 
-    // Build the report content,
-    const report_file = STATICS.toReportPath(
+  // Views the build log for the given repository,
+  function viewBuildLog(req, res, repo_key) {
+
+    // Find the matching repository key,
+    const matched_repo = findMatchingRepositoryKey(repo_key);
+
+    // Build report file location,
+    const report_file = STATICS.toBuildReportPath(
               matched_repo.gitname, matched_repo.branch);
 
     fs.stat(report_file, (err, stats) => {
@@ -139,7 +142,45 @@ function projectsViewHandler(config, project_builder) {
 
 
   function viewTestReport(req, res, repo_key) {
-    res.end('View Test Report Output... ' + repo_key);
+
+    // Find the matching repository key,
+    const matched_repo = findMatchingRepositoryKey(repo_key);
+
+    // Test log content file,
+    const report_file = STATICS.toTestReportPath(
+              matched_repo.gitname, matched_repo.branch);
+
+    fs.stat(report_file, (err, stats) => {
+      fs.readFile(report_file, 'utf8', (err, content) => {
+        let report_content;
+        if (err) {
+          report_content = 'No test logs currently available.';
+        }
+        else {
+          // Convert the Unix ANSI content to HTML,
+          report_content = ansiToHTML(content);
+        }
+
+        const args = {
+          config: config.cur,
+          page_title: 'Test Report',
+          report_content: report_content,
+          repo: matched_repo,
+          mtime: stats ? util.inspect(stats.mtime) : ''
+        };
+
+        toStaticPage('testreport.handlebars', args, (err, html) => {
+          if (err) {
+            console.error(err.stack);
+            res.status(500).send('Script failed. See logs.');
+          }
+          else {
+            res.end(html);
+          }
+        });
+      });
+    });
+
   }
 
 

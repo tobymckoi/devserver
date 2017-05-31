@@ -21,6 +21,8 @@ div.report_content pre {
 }
 
 
+/* --- ANSI styles --- */
+
 /* ANSI Foreground color codes */
 .fhiblack {
   color: black;
@@ -125,6 +127,7 @@ div.report_content pre {
   background-color: lightGray;
 }
 
+/* --- End ANSI styles --- */
 
 
 table.project_list td {

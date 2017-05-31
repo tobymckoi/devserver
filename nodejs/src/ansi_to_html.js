@@ -6,6 +6,7 @@ const AnsiParser = require('node-ansiparser');
 
 
 
+// Sparce array for ANSI code to span style class
 
 const ansi_styles = [];
 ansi_styles[30] = 'fliblack';
