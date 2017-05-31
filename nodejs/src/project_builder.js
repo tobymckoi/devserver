@@ -234,35 +234,46 @@ function projectBuilder(config) {
   }
 
 
+  function getReportDestination(update_type, gitname, branch) {
+    if (update_type === 'build') {
+      return STATICS.toBuildReportPath(gitname, branch);
+    }
+    else if (update_type === 'test') {
+      return STATICS.toTestReportPath(gitname, branch);
+    }
+    else {
+      throw Error("Unknown update type");
+    }
+  }
+
 
   function fileBuildSuccess(repo_path, build, repo_ob, callback) {
-    const build_report_path =
-              STATICS.toBuildReportPath(repo_ob.gitname, repo_ob.branch);
-    writeChunksToFile(build_report_path, repo_path, build, callback);
+    const report_path = getReportDestination(
+              build.update_type, repo_ob.gitname, repo_ob.branch);
+    writeChunksToFile(report_path, repo_path, build, callback);
   }
 
 
   function fileBuildFailure(repo_path, build, repo_ob, callback) {
-    const build_report_path =
-              STATICS.toBuildReportPath(repo_ob.gitname, repo_ob.branch);
-    writeChunksToFile(build_report_path, repo_path, build, callback);
+    const report_path = getReportDestination(
+              build.update_type, repo_ob.gitname, repo_ob.branch);
+    writeChunksToFile(report_path, repo_path, build, callback);
   }
 
 
-  function callCallbackOn(callbacks) {
-    const nargs = [];
-    for (let i = 1; i < arguments.length; ++i) {
-      nargs[i - 1] = arguments[i];
-    }
-    callbacks.forEach( (callback) => {
-      callback.apply(callback, nargs);
-    });
-  }
+  // function callCallbackOn(callbacks) {
+  //   const nargs = [];
+  //   for (let i = 1; i < arguments.length; ++i) {
+  //     nargs[i - 1] = arguments[i];
+  //   }
+  //   callbacks.forEach( (callback) => {
+  //     callback.apply(callback, nargs);
+  //   });
+  // }
 
   function handleBuildFail(build, repo_path, repo_ob, callback) {
     // File that the build failed,
     fileBuildFailure(repo_path, build, repo_ob, (err) => {
-//      build.in_progress = false;
       clearBuildObject(repo_ob);
 
       // If the 'fileBuildFailure' function produces an error then
@@ -299,66 +310,52 @@ function projectBuilder(config) {
 
   function buildProject(cur_config, current_build, repo_path, repo_ob, callback) {
 
-//    // Add callback to be notified when build complete,
-//    current_build.callbacks.push(callback);
+    const project_branch = repo_ob.branch;
 
-//    // If the current build isn't in progress,
-//    if (current_build.in_progress !== true) {
+    // Update 'in_progress' status,
+    current_build.out_chunks = [];
 
-      const project_branch = repo_ob.branch;
+    // Fetch from remote and determine if current base is different
+    // than the remote.
+    gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
+      if (err) {
+        writeToBuildLog(current_build, 'Error during git fetch.\n');
+        writeToBuildLog(current_build, '%s\n', err);
+        handleBuildFail(current_build, repo_path, repo_ob, () => {
+          callback(err);
+        });
+      }
+      else if (different) {
+        // Different, so checkout to new version,
+        writeToBuildLog(current_build, 'Differences on Git Remote.\n');
 
-      // Update 'in_progress' status,
-//      current_build.in_progress = true;
-      current_build.out_chunks = [];
+        // Run 'checkout' then 'merge'
+        gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
+          if (err) {
+            writeToBuildLog(current_build, 'Error during git checkout and merge.\n');
+            writeToBuildLog(current_build, '%s\n', err);
+            handleBuildFail(current_build, repo_path, repo_ob, () => {
+              callback(err);
+            });
+          }
+          else {
 
-      // Fetch from remote and determine if current base is different
-      // than the remote.
-      gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
-        if (err) {
-          writeToBuildLog(current_build, 'Error during git fetch.\n');
-          writeToBuildLog(current_build, '%s\n', err);
-          handleBuildFail(current_build, repo_path, repo_ob, () => {
-            callback(err);
-//            callCallbackOn(current_build.callbacks, err);
-          });
-        }
-        else if (different) {
-          // Different, so checkout to new version,
-          writeToBuildLog(current_build, 'Differences on Git Remote.\n');
+            // Go do the build commands for this project,
+            runBuildScript(cur_config, current_build, repo_path, repo_ob, callback);
 
-          // Run 'checkout' then 'merge'
-          gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
-            if (err) {
-              writeToBuildLog(current_build, 'Error during git checkout and merge.\n');
-              writeToBuildLog(current_build, '%s\n', err);
-              handleBuildFail(current_build, repo_path, repo_ob, () => {
-                callback(err);
-//                callCallbackOn(current_build.callbacks, err);
-              });
-            }
-            else {
+          }
+        });
 
-              // Go do the build commands for this project,
-              runBuildScript(cur_config, current_build, repo_path, repo_ob, callback);
+      }
+      else {
+        // No differences,
+        writeToBuildLog(current_build, 'No Differences.\n');
+        clearBuildObject(repo_ob);
+        callback(undefined,
+            util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
+      }
+    });
 
-            }
-          });
-
-        }
-        else {
-          // No differences,
-          writeToBuildLog(current_build, 'No Differences.\n');
-//          current_build.in_progress = false;
-          clearBuildObject(repo_ob);
-          callback(undefined,
-              util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//          callCallbackOn(current_build.callbacks, undefined,
-//              util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-        }
-      });
-
-
-//    }
 
   }
 
@@ -459,19 +456,15 @@ function projectBuilder(config) {
               writeToBuildLog(current_build, '%s\n', last_failure);
               handleBuildFail(current_build, repo_path, repo_ob, () => {
                 callback(last_failure);
-//                callCallbackOn(current_build.callbacks, last_failure);
               });
             }
             else {
               // File success report,
               fileBuildSuccess(repo_path, current_build, repo_ob, () => {
                 console.log("Build complete.");
-//                current_build.in_progress = false;
                 clearBuildObject(repo_ob);
                 callback(undefined,
                     util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//                callCallbackOn(current_build.callbacks, undefined,
-//                         util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
               });
             }
           }
@@ -498,19 +491,15 @@ function projectBuilder(config) {
             writeToBuildLog(current_build, '%s\n', err);
             handleBuildFail(current_build, repo_path, repo_ob, () => {
               callback(err);
-//              callCallbackOn(current_build.callbacks, err);
             });
           }
           else {
             // File success report,
             fileBuildSuccess(repo_path, current_build, repo_ob, () => {
               console.log("Build complete.");
-//              current_build.in_progress = false;
               clearBuildObject(repo_ob);
               callback(undefined,
                       util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//              callCallbackOn(current_build.callbacks, undefined,
-//                       util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
             });
           }
         });
@@ -520,12 +509,9 @@ function projectBuilder(config) {
     else {
       // No build type,
       // File success report,
-//      current_build.in_progress = false;
       clearBuildObject(repo_ob);
       callback(undefined,
               util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//      callCallbackOn(current_build.callbacks, undefined,
-//               util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
     }
 
   }
@@ -621,66 +607,27 @@ function projectBuilder(config) {
 
   function testProject(cur_config, current_build, repo_path, repo_ob, callback) {
 
-//    // Add callback to be notified when build complete,
-//    current_build.callbacks.push(callback);
+    const project_branch = repo_ob.branch;
 
-//    // If the current build isn't in progress,
-//    if (current_build.in_progress !== true) {
+    current_build.out_chunks = [];
 
-      const project_branch = repo_ob.branch;
+    // Run 'checkout' then 'merge' to ensure we are on the correct
+    // branch to test.
+    gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
+      if (err) {
+        writeToBuildLog(current_build, 'Error during git checkout and merge.\n');
+        writeToBuildLog(current_build, '%s\n', err);
+        handleBuildFail(current_build, repo_path, repo_ob, () => {
+          callback(err);
+        });
+      }
+      else {
 
-//      // Update 'in_progress' status,
-//      current_build.in_progress = true;
-      current_build.out_chunks = [];
+        // Go do the test commands for this project,
+        runTestScript(cur_config, current_build, repo_path, repo_ob, callback);
 
-      // Fetch from remote and determine if current base is different
-      // than the remote.
-      gitFetchAndDifCheck(current_build, repo_path, project_branch, (err, different) => {
-        if (err) {
-          writeToBuildLog(current_build, 'Error during git fetch.\n');
-          writeToBuildLog(current_build, '%s\n', err);
-          handleBuildFail(current_build, repo_path, repo_ob, () => {
-            callback(err);
-//            callCallbackOn(current_build.callbacks, err);
-          });
-        }
-        else if (different) {
-          // Different, so checkout to new version,
-          writeToBuildLog(current_build, 'Differences on Git Remote.\n');
-
-          // Run 'checkout' then 'merge'
-          gitCheckoutAndMerge(current_build, repo_path, project_branch, (err) => {
-            if (err) {
-              writeToBuildLog(current_build, 'Error during git checkout and merge.\n');
-              writeToBuildLog(current_build, '%s\n', err);
-              handleBuildFail(current_build, repo_path, repo_ob, () => {
-                callback(err);
-//                callCallbackOn(current_build.callbacks, err);
-              });
-            }
-            else {
-
-              // Go do the build commands for this project,
-              runBuildScript(cur_config, current_build, repo_path, repo_ob);
-
-            }
-          });
-
-        }
-        else {
-          // No differences,
-          writeToBuildLog(current_build, 'No Differences.\n');
-//          current_build.in_progress = false;
-          clearBuildObject(repo_ob);
-          callback(undefined,
-              util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-//          callCallbackOn(current_build.callbacks, undefined,
-//              util.format("BUILD COMPLETE:%s", (new Date()).getTime()));
-        }
-      });
-
-
-//    }
+      }
+    });
 
   }
 
@@ -761,7 +708,7 @@ function projectBuilder(config) {
               const last_waiting_ob = build_info.waiting[build_info.waiting.length - 1];
               const update_type = last_waiting_ob.update_type;
 
-              console.log("Doing: %s", update_type);
+              current_build.update_type = update_type;
 
               if (update_type === 'build') {
                 // Build it,
