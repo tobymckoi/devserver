@@ -139,8 +139,8 @@ fs.access(CONFIG_FILE, fs.F_OK | fs.R_OK, (err) => {
       }, 50);
     });
 
-    pollMonitorProjects();
     startService();
+    setTimeout( pollMonitorProjects, 200 );
 
   }
 });
@@ -164,6 +164,7 @@ function configStatusUpdate() {
 function pollMonitorProjects() {
   // Monitor and build the projects,
   project_builder.fullPass();
+
   // Randomize polls so we don't create resonate spikes in traffic,
   // On average we poll every 5 minutes,
   const poll_timeout = (30000 + (Math.random() * 60000)) * 5;

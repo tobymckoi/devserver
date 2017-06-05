@@ -632,6 +632,24 @@ function projectBuilder(config) {
   }
 
 
+  // Runs the test script(s) for the given repository and branch,
+  function runTestScript(cur_config, current_build, repo_path, repo_ob, callback) {
+
+    console.log("     Testing: %s", repo_path);
+
+    const project_branch = repo_ob.branch;
+
+    // Run the list of test fixtures and write the test result
+    // to the build log.
+
+
+
+    clearBuildObject(repo_ob);
+    callback(undefined,
+            util.format("TEST COMPLETE:%s", (new Date()).getTime()));
+
+  }
+
 
 
   const current_git_builds = {};
@@ -687,10 +705,15 @@ function projectBuilder(config) {
               // Callback on oldest first,
               const waiting_ob = build_info.waiting.shift();
               const callback = waiting_ob.callback;
-              if (callback !== undefined) {
-                callback(undefined, build_result);
+              if (waiting_ob !== undefined) {
+                // NOTE: Important the callback is behind a 'setImmediate'
+                //   because callback might change build_info.
+                //
+                // callback(undefined, build_result)
+                setImmediate(callback, undefined, build_result);
               }
-              console.log("Completed update git project: %s", build_info.git_name);
+              console.log("Completed update (%s) git project: %s",
+                              waiting_ob.update_type, build_info.git_name);
               // Recurse to see if we need to rebuild because a request
               // happened while we were building,
               internalUpdateGitProject(cur_config, build_info);
@@ -745,9 +768,14 @@ function projectBuilder(config) {
       const waiting_ob = build_info.waiting.shift();
       const callback = waiting_ob.callback;
       if (callback !== undefined) {
-        callback(undefined, build_result);
+        // NOTE: Important the callback is behind a 'setImmediate'
+        //   because callback might change build_info.
+        //
+        // callback(undefined, build_result)
+        setImmediate(callback, undefined, build_result);
       }
-      console.log("Completed update git project: %s", build_info.git_name);
+      console.log("Completed update (%s) git project: %s",
+                      waiting_ob.update_type, build_info.git_name);
       // Recurse to see if we need to rebuild because a request
       // happened while we were building,
       internalUpdateGitProject(cur_config, build_info);
@@ -791,6 +819,39 @@ function projectBuilder(config) {
 
 
 
+
+  function fullPassBuild(unique_repos, build_results, callback) {
+    let build_count = 0;
+    // Go check/build all the repos,
+    unique_repos.forEach( (gitname) => {
+      updateGitProject(gitname, (err, status) => {
+        build_results.push({ type:'build', gitname, err, status });
+        ++build_count;
+        if (build_count === unique_repos.length) {
+          if (callback !== undefined) {
+            callback(undefined);
+          }
+        }
+      });
+    });
+  }
+
+  function fullPassTest(unique_repos, build_results, callback) {
+    let test_count = 0;
+    // Go check/build all the repos,
+    unique_repos.forEach( (gitname) => {
+      runProjectTests(gitname, (err, status) => {
+        build_results.push({ type:'test', gitname, err, status });
+        ++test_count;
+        if (test_count === unique_repos.length) {
+          if (callback !== undefined) {
+            callback(undefined);
+          }
+        }
+      });
+    });
+  }
+
   // Performs a full scan and build of all projects. Works by
   // generating a list of unique git project repositories and
   // building each in turn.
@@ -815,14 +876,13 @@ function projectBuilder(config) {
       callback(undefined, build_results);
     }
     else {
-      // Go check/build all the repos,
-      unique_repos.forEach( (gitname) => {
-        updateGitProject(gitname, (err, status) => {
-          build_results.push({ gitname, err, status });
-          if (build_results.length === unique_repos.length) {
-            if (callback !== undefined) {
-              callback(undefined, build_results);
-            }
+      console.log("Calling: fullPassBuild");
+      fullPassBuild(unique_repos, build_results, (err) => {
+        console.log("Calling: fullPassTest");
+        fullPassTest(unique_repos, build_results, (err) => {
+          console.log("Finished fullPassBuild and fullPassTest");
+          if (callback !== undefined) {
+            callback(undefined, build_results);
           }
         });
       });
